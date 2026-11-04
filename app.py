@@ -123,9 +123,14 @@ def migrate_legacy_game():
     new_prefix = "lib:%s:" % GAME_ID
     for name in list(kv.keys(old_prefix)):
         target = new_prefix + name[len(old_prefix):]
-        raw = kv.get(name)
-        if raw is not None and kv.get(target) is None:
-            kv.set(target, raw)
+        if name == old_prefix + "releases":
+            if not kv.lrange(target, 0, 0):
+                for item in reversed(kv.lrange(name, 0, 1000)):
+                    kv.lpush(target, item)
+        else:
+            raw = kv.get(name)
+            if raw is not None and kv.get(target) is None:
+                kv.set(target, raw)
         kv.delete(name)
     for rec in all_keys():
         if rec.get("game") == legacy:
