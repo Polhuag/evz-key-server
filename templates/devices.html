@@ -27,15 +27,24 @@
   <div class="table-wrap">
     <table>
       <thead>
-        <tr><th>Thiết bị</th><th>Key</th><th>Trạng thái</th><th>Lần cuối</th><th>IP</th><th style="width:150px"></th></tr>
+        <tr><th>Thiết bị</th><th>Key</th><th>Hệ điều hành</th><th>Trạng thái</th><th>Lần cuối</th><th>IP</th><th style="width:150px"></th></tr>
       </thead>
       <tbody>
       {% for d in devices %}
         <tr>
-          <td data-label="Thiết bị"><span class="mono copy" data-copy="{{ d.serial }}">{{ mask(d.serial, 5) }}</span></td>
+          <td data-label="Thiết bị">
+            <span class="mono copy" data-copy="{{ d.serial }}">{{ mask(d.serial, 5) }}</span>
+            {% if d.info.model or d.info.brand %}<div class="small">{{ d.info.brand }} {{ d.info.model }}</div>{% endif %}
+            {% if d.info.did %}<div class="muted small mono copy" data-copy="{{ d.info.did }}">DID {{ mask(d.info.did, 6) }}</div>{% endif %}
+          </td>
           <td data-label="Key" class="mono">
             {% for k in d['keys'][:2] %}<div class="copy" data-copy="{{ k.k }}">{{ k.k }}</div>{% endfor %}
             {% if d['keys']|length > 2 %}<div class="muted small">+{{ d['keys']|length - 2 }} key</div>{% endif %}
+          </td>
+          <td data-label="Hệ điều hành" class="small">
+            {% if d.info.android %}<div>Android {{ d.info.android }}{% if d.info.sdk %} · API {{ d.info.sdk }}{% endif %}</div>{% endif %}
+            {% if d.info.app %}<div class="muted">App {{ d.info.app }}</div>{% endif %}
+            {% if not d.info.android and not d.info.app %}<span class="muted">—</span>{% endif %}
           </td>
           <td data-label="Trạng thái">
             {% if d.blocked %}<span class="badge bad">Bị chặn</span>

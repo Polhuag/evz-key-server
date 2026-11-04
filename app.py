@@ -249,6 +249,29 @@ def healthz():
             "storage": type(kv).__name__, "lib": (lib_meta(GAME_ID) or {}).get("version", "")}
 
 
+def device_info(body, ip):
+    ver = str(body.get("ver") or "").strip()
+    return {
+        "did": str(body.get("did") or "")[:80],
+        "brand": str(body.get("brand") or "")[:48],
+        "model": str(body.get("model") or "")[:64],
+        "device": str(body.get("device") or "")[:64],
+        "android": str(body.get("android") or "")[:32],
+        "sdk": str(body.get("sdk") or "")[:8],
+        "abi": str(body.get("abi") or "")[:32],
+        "app": str(body.get("app") or ver)[:48],
+        "res": str(body.get("res") or "")[:32],
+        "lang": str(body.get("lang") or "")[:24],
+        "ram": str(body.get("ram") or "")[:24],
+        "carrier": str(body.get("carrier") or "")[:48],
+        "root": str(body.get("root") or "")[:4],
+        "emu": str(body.get("emu") or "")[:4],
+        "ip": ip,
+        "first": now_ts(),
+        "last": now_ts(),
+    }
+
+
 @app.post("/connect")
 async def connect(request: Request):
     ip = client_ip(request)
@@ -263,6 +286,7 @@ async def connect(request: Request):
     key = str(body.get("user_key") or "").strip().upper()
     serial = str(body.get("serial") or "").strip()
     ver = str(body.get("ver") or "").strip()
+    dev = device_info(body, ip)
 
     if not rl.hit("c:" + ip, 40, 60):
         return JSONResponse({"status": False, "reason": "Quá nhiều yêu cầu, thử lại sau"}, status_code=429)
@@ -298,6 +322,13 @@ async def connect(request: Request):
             rec["last_seen"] = now_ts()
             rec["last_ip"] = ip
             rec["activations"] = int(rec.get("activations") or 0) + 1
+            devices = rec.get("devices") or {}
+            olddev = devices.get(serial) or {}
+            if olddev.get("first"):
+                dev["first"] = olddev.get("first")
+            devices[serial] = dev
+            rec["devices"] = devices
+            rec["last_device"] = dev
             put_key(rec)
 
     if reason:
@@ -337,6 +368,73 @@ async def connect(request: Request):
             "sig": sig_b64,
             "ticket": ticket_make(game, serial, key),
             "lib": lib,
+        },
+    })
+
+
+@app.post("/heartbeat")
+async def heartbeat(request: Request):
+    ip = client_ip(request)
+    ctype = request.headers.get("content-type", "")
+    if "application/json" in ctype:
+        body = await request.json()
+    else:
+        body = dict(await request.form())
+
+    game = str(body.get("game") or GAME_ID)
+    key = str(body.get("user_key") or "").strip().upper()
+    serial = str(body.get("serial") or "").strip()
+    ver = str(body.get("ver") or "").strip()
+
+    if not rl.hit("h:" + ip, 80, 60):
+        return JSONResponse({"status": False, "reason": "Quá nhiều yêu cầu"}, status_code=429)
+    if not key or not serial:
+        return JSONResponse({"status": False, "reason": "Thiếu key hoặc mã thiết bị"})
+
+    rec = get_key(key)
+    reason = ""
+    if rec is None:
+        reason = "Key không hợp lệ"
+    elif rec.get("game") and rec["game"] != game:
+        reason = "Key không đúng game"
+    elif rec.get("banned"):
+        reason = "Key đã bị khoá"
+    elif rec.get("expires") and rec["expires"] < now_ts():
+        reason = "Key đã hết hạn"
+    elif serial not in (rec.get("serials") or []):
+        reason = "Thiết bị không khớp key"
+
+    if reason:
+        log_event({"ip": ip, "key": mask(key), "serial": mask(serial), "ok": 0, "r": reason, "ver": ver})
+        return JSONResponse({"status": False, "reason": reason})
+
+    dev = device_info(body, ip)
+    devices = rec.get("devices") or {}
+    olddev = devices.get(serial) or {}
+    if olddev.get("first"):
+        dev["first"] = olddev["first"]
+    devices[serial] = dev
+    rec["devices"] = devices
+    rec["last_device"] = dev
+    rec["last_seen"] = now_ts()
+    rec["last_ip"] = ip
+    put_key(rec)
+
+    payload = {
+        "k": key,
+        "s": serial,
+        "g": game,
+        "r": now_ts(),
+        "hb": 1,
+        "e": rec.get("expires") or 0,
+    }
+    payload_b64, sig_b64 = sign_payload(payload)
+    return JSONResponse({
+        "status": True,
+        "data": {
+            "payload": payload_b64,
+            "sig": sig_b64,
+            "EXP": fmt_ts(rec.get("expires") or 0),
         },
     })
 
@@ -516,6 +614,7 @@ def all_devices():
     for d in devs:
         d["online"] = d["last_seen"] > t - 900
         d["primary"] = max(d["keys"], key=lambda k: k.get("last_seen") or 0)
+        d["info"] = (d["primary"].get("devices") or {}).get(d["serial"]) or d["primary"].get("last_device") or {}
     devs.sort(key=lambda d: (-(d["last_seen"] or 0), d["serial"]))
     return devs
 
@@ -687,7 +786,10 @@ def admin_devices(request: Request, q: str = "", state: str = ""):
     if q:
         ql = q.strip().lower()
         devs = [d for d in devs if ql in d["serial"].lower()
-                or any(ql in k["k"].lower() for k in d["keys"])]
+                or any(ql in k["k"].lower() for k in d["keys"])
+                or ql in (d.get("info", {}).get("model") or "").lower()
+                or ql in (d.get("info", {}).get("brand") or "").lower()
+                or ql in (d.get("info", {}).get("did") or "").lower()]
     if state == "online":
         devs = [d for d in devs if d["online"]]
     elif state == "offline":
