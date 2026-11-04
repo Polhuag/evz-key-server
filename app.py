@@ -19,8 +19,8 @@ from cryptography.hazmat.primitives.asymmetric import padding
 from store import open_store
 
 APP_NAME = os.environ.get("APP_NAME", "EVOLUTIONZ V2")
-GAME_ID = os.environ.get("GAME_ID", "PUBG")
-TOKEN_PREFIX = os.environ.get("TOKEN_PREFIX", "PUBG")
+GAME_ID = os.environ.get("GAME_ID", "com.garena.game.kgvn")
+TOKEN_PREFIX = os.environ.get("TOKEN_PREFIX", "EVOLUTIONZ-V2")
 MIN_CLIENT_VERSION = os.environ.get("MIN_CLIENT_VERSION", "")
 ADMIN_USER = os.environ.get("ADMIN_USER", "admin")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
@@ -113,6 +113,27 @@ def log_event(entry):
     entry["t"] = now_ts()
     kv.lpush("log:connect", json.dumps(entry, ensure_ascii=False).encode())
     kv.ltrim("log:connect", 0, 999)
+
+
+def migrate_legacy_game():
+    legacy = "PUBG"
+    if not GAME_ID or GAME_ID == legacy:
+        return
+    old_prefix = "lib:%s:" % legacy
+    new_prefix = "lib:%s:" % GAME_ID
+    for name in list(kv.keys(old_prefix)):
+        target = new_prefix + name[len(old_prefix):]
+        raw = kv.get(name)
+        if raw is not None and kv.get(target) is None:
+            kv.set(target, raw)
+        kv.delete(name)
+    for rec in all_keys():
+        if rec.get("game") == legacy:
+            rec["game"] = GAME_ID
+            put_key(rec)
+
+
+migrate_legacy_game()
 
 
 def recent_logs(limit=200):
