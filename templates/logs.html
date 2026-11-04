@@ -1,0 +1,32 @@
+{% extends "admin_base.html" %}
+{% set page='logs' %}
+{% block title %}Lịch sử · {{ app }}{% endblock %}
+{% block content %}
+<div class="top">
+  <div>
+    <h1>Lịch sử đăng nhập</h1>
+    <p>400 lượt gần nhất — dùng để phát hiện chia sẻ key</p>
+  </div>
+</div>
+<div class="card">
+  {% if logs %}
+  <div style="overflow:auto">
+  <table>
+    <thead><tr><th>Thời gian</th><th>Key</th><th>Thiết bị</th><th>IP</th><th>Phiên bản</th><th>Kết quả</th></tr></thead>
+    <tbody>
+    {% for l in logs %}
+      <tr>
+        <td class="note" style="white-space:nowrap">{{ fmt(l.t) }}</td>
+        <td class="mono">{{ l.key }}</td>
+        <td class="mono">{{ l.serial }}</td>
+        <td class="note">{{ l.ip }}</td>
+        <td class="note">{{ l.ver or '—' }}</td>
+        <td>{% if l.ok %}<span class="badge b-ok">OK</span>{% else %}<span class="badge b-bad">{{ l.r }}</span>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}<div class="empty">Chưa có dữ liệu.</div>{% endif %}
+</div>
+{% endblock %}

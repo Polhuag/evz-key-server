@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="hero">
+  <div class="card">
+    <div class="logo">EV</div>
+    <h1>{{ app }}</h1>
+    <p>Hệ thống quản lý key &amp; cập nhật mod.<br>Đăng nhập để quản lý key, thiết bị và bản mod.</p>
+    {% if error %}<div class="alert bad">{{ error }}</div>{% endif %}
+    <form method="post" action="/admin/login" style="text-align:left">
+      <div class="field">
+        <label>Tài khoản</label>
+        <input name="username" value="{{ username or '' }}" autocomplete="username" placeholder="admin" required>
+      </div>
+      <div class="field">
+        <label>Mật khẩu</label>
+        <input name="password" type="password" autocomplete="current-password" placeholder="••••••••" required>
+      </div>
+      <button class="btn primary" style="width:100%;margin-top:6px" type="submit">Đăng nhập</button>
+    </form>
+    <div class="meta">
+      <span class="chip"><span class="dot"></span> Server hoạt động</span>
+      <span class="chip">RSA-2048</span>
+    </div>
+  </div>
+</div>
+{% endblock %}

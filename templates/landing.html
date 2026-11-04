@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="hero">
+  <div class="card">
+    <div class="logo">EV</div>
+    <h1>{{ app }}</h1>
+    <p>Key system chính thức. Mở game và đăng nhập bằng key để sử dụng mod.<br>
+       Bản mod luôn tự động cập nhật — không cần tải lại APK.</p>
+    <div class="meta">
+      <span class="chip"><span class="dot"></span> Server hoạt động</span>
+      {% if lib %}<span class="chip">Bản mod v{{ lib.version }}</span>{% endif %}
+      <span class="chip">Bảo mật RSA-2048</span>
+    </div>
+    <div style="margin-top:24px">
+      <a class="btn" href="/admin/login">Quản trị</a>
+    </div>
+  </div>
+</div>
+{% endblock %}

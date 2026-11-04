@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="wrap">
+  <aside class="side">
+    <div class="brand">
+      <div class="logo">EV</div>
+      <div><b>{{ app }}</b><span>KEY PANEL</span></div>
+    </div>
+    <nav class="nav">
+      <a href="/admin" class="{{ 'on' if page=='home' else '' }}"><i>◈</i> Tổng quan</a>
+      <a href="/admin/keys" class="{{ 'on' if page=='keys' else '' }}"><i>⌘</i> Quản lý Key</a>
+      <a href="/admin/lib" class="{{ 'on' if page=='lib' else '' }}"><i>⬢</i> Bản mod (.so)</a>
+      <a href="/admin/logs" class="{{ 'on' if page=='logs' else '' }}"><i>≡</i> Lịch sử đăng nhập</a>
+      <a href="/admin/settings" class="{{ 'on' if page=='settings' else '' }}"><i>⚙</i> Cài đặt</a>
+    </nav>
+    <div class="foot">
+      EVOLUTIONZ KEY SYSTEM<br>
+      Phiên bản bảo mật RSA-2048
+    </div>
+  </aside>
+  <main class="main">
+    {% block content %}{% endblock %}
+  </main>
+</div>
+{% endblock %}

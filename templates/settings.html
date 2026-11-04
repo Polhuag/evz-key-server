@@ -1,0 +1,52 @@
+{% extends "admin_base.html" %}
+{% set page='settings' %}
+{% block title %}Cài đặt · {{ app }}{% endblock %}
+{% block content %}
+<div class="top">
+  <div>
+    <h1>Cài đặt</h1>
+    <p>Tài khoản quản trị và tuỳ chọn hệ thống</p>
+  </div>
+</div>
+
+{% if ok %}<div class="alert ok">Đã lưu thay đổi.</div>{% endif %}
+{% if err == 'short' %}<div class="alert bad">Mật khẩu phải từ 6 ký tự.</div>{% endif %}
+{% if err == 'match' %}<div class="alert bad">Hai mật khẩu không khớp.</div>{% endif %}
+
+<div class="grid g2">
+  <div class="card">
+    <h2 class="sec">Đổi tài khoản quản trị</h2>
+    <form method="post" action="/admin/settings/password">
+      <div class="field"><label>Tài khoản</label><input name="username" value="{{ user }}" required></div>
+      <div class="field"><label>Mật khẩu mới</label><input name="password" type="password" minlength="6" required></div>
+      <div class="field"><label>Nhập lại mật khẩu</label><input name="password2" type="password" minlength="6" required></div>
+      <button class="btn primary" type="submit">Lưu &amp; đăng xuất</button>
+    </form>
+    <div class="note" style="margin-top:12px">Đổi mật khẩu sẽ đăng xuất mọi phiên hiện tại.</div>
+  </div>
+
+  <div class="card">
+    <h2 class="sec">Key free</h2>
+    <form method="post" action="/admin/settings/free">
+      <label style="display:flex;align-items:center;gap:9px;text-transform:none;font-size:12.5px;color:var(--txt);margin-bottom:14px">
+        <input type="checkbox" name="enabled" value="1" {{ 'checked' if free_on }} style="width:auto">
+        Cho phép thiết bị nhận 1 key free (mỗi máy 1 lần / 7 ngày)
+      </label>
+      <button class="btn" type="submit">Lưu</button>
+    </form>
+    <div class="note" style="margin-top:12px">
+      Key free lấy từ kho key được tạo với nhãn “Key free”. Nên tắt nếu không muốn phát key miễn phí.
+    </div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <h2 class="sec">Bảo mật</h2>
+  <div class="note">
+    · Mọi phản hồi đăng nhập được ký <b>RSA-2048 / SHA-256</b>; client chỉ giữ khoá công khai nên không thể tự tạo key.<br>
+    · Key bị khoá theo HWID (mặc định 1 thiết bị), có thể reset trong mục Quản lý Key.<br>
+    · Giới hạn tần suất đăng nhập theo IP và theo key.<br>
+    · File lib chỉ tải được bằng ticket ngắn hạn phát ra sau khi đăng nhập hợp lệ.
+  </div>
+</div>
+{% endblock %}

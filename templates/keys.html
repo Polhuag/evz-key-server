@@ -1,0 +1,105 @@
+{% extends "admin_base.html" %}
+{% set page='keys' %}
+{% block title %}Quản lý Key · {{ app }}{% endblock %}
+{% block content %}
+<div class="top">
+  <div>
+    <h1>Quản lý Key</h1>
+    <p>Tổng {{ stats.total }} key · {{ stats.active }} đang hoạt động · {{ stats.banned }} bị khoá</p>
+  </div>
+</div>
+
+{% if request.query_params.get('created') %}
+<div class="alert ok">Đã tạo key mới. Bấm vào key để copy nhanh.</div>
+{% endif %}
+
+<div class="card" style="margin-bottom:16px">
+  <h2 class="sec">Tạo key</h2>
+  <form method="post" action="/admin/keys/create">
+    <div class="row">
+      <div class="field"><label>Số lượng</label><input name="count" type="number" value="1" min="1" max="200"></div>
+      <div class="field"><label>Số ngày (0 = vĩnh viễn)</label><input name="days" type="number" value="30" min="0" max="3650"></div>
+      <div class="field"><label>Giới hạn thiết bị</label><input name="device_limit" type="number" value="1" min="1" max="5"></div>
+      <div class="field" style="flex:2"><label>Ghi chú</label><input name="note" placeholder="VD: khách zalo 04/11"></div>
+      <div class="field" style="flex:0 0 auto">
+        <label>&nbsp;</label>
+        <label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:12px;color:var(--mut);padding:11px 0">
+          <input type="checkbox" name="free" value="1" style="width:auto"> Key free
+        </label>
+      </div>
+      <div class="field" style="flex:0 0 auto"><label>&nbsp;</label><button class="btn primary" type="submit">Tạo</button></div>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <div class="pill-row">
+    <a class="pill {{ 'on' if not status else '' }}" href="/admin/keys?q={{ q }}">Tất cả</a>
+    <a class="pill {{ 'on' if status=='active' else '' }}" href="/admin/keys?status=active&q={{ q }}">Hoạt động</a>
+    <a class="pill {{ 'on' if status=='unused' else '' }}" href="/admin/keys?status=unused&q={{ q }}">Chưa dùng</a>
+    <a class="pill {{ 'on' if status=='expired' else '' }}" href="/admin/keys?status=expired&q={{ q }}">Hết hạn</a>
+    <a class="pill {{ 'on' if status=='banned' else '' }}" href="/admin/keys?status=banned&q={{ q }}">Bị khoá</a>
+    <form method="get" action="/admin/keys" style="margin-left:auto;display:flex;gap:8px">
+      <input name="q" value="{{ q }}" placeholder="Tìm key / HWID / ghi chú" style="min-width:220px">
+      <input type="hidden" name="status" value="{{ status }}">
+      <button class="btn sm" type="submit">Tìm</button>
+    </form>
+  </div>
+
+  {% if keys %}
+  <div style="overflow:auto">
+  <table>
+    <thead>
+      <tr><th>Key</th><th>Trạng thái</th><th>Thiết bị (HWID)</th><th>Hết hạn</th><th>Ghi chú</th><th>Thao tác</th></tr>
+    </thead>
+    <tbody>
+    {% for k in keys %}
+      <tr>
+        <td class="mono copy" data-copy="{{ k.k }}">{{ k.k }}</td>
+        <td>
+          {% if k.banned %}<span class="badge b-bad">Bị khoá</span>
+          {% elif k.expires and k.expires <= now %}<span class="badge b-warn">Hết hạn</span>
+          {% elif not k.used %}<span class="badge b-mut">Chưa dùng</span>
+          {% else %}<span class="badge b-ok">Hoạt động</span>{% endif %}
+        </td>
+        <td class="note mono">
+          {% if k.serials %}{{ mask(k.serials[0], 4) }}{% if k.serials|length > 1 %} +{{ k.serials|length - 1 }}{% endif %}
+          <span class="badge b-mut" style="margin-left:4px">{{ k.device_limit }} máy</span>
+          {% else %}—{% endif %}
+        </td>
+        <td class="note">{{ fmt(k.expires) if k.expires else 'Vĩnh viễn' }}</td>
+        <td class="note">{{ k.note or '—' }}</td>
+        <td>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <form method="post" action="/admin/keys/action" style="display:inline">
+              <input type="hidden" name="key" value="{{ k.k }}">
+              <input type="hidden" name="action" value="extend"><input type="hidden" name="value" value="30">
+              <button class="btn sm" type="submit" title="Cộng 30 ngày">+30d</button>
+            </form>
+            <form method="post" action="/admin/keys/action" style="display:inline">
+              <input type="hidden" name="key" value="{{ k.k }}">
+              <input type="hidden" name="action" value="reset">
+              <button class="btn sm" type="submit" title="Xoá HWID để dùng máy khác">Reset</button>
+            </form>
+            <form method="post" action="/admin/keys/action" style="display:inline">
+              <input type="hidden" name="key" value="{{ k.k }}">
+              <input type="hidden" name="action" value="{{ 'unban' if k.banned else 'ban' }}">
+              <button class="btn sm" type="submit">{{ 'Mở' if k.banned else 'Khoá' }}</button>
+            </form>
+            <form method="post" action="/admin/keys/action" style="display:inline" onsubmit="return confirm('Xoá key này?')">
+              <input type="hidden" name="key" value="{{ k.k }}">
+              <input type="hidden" name="action" value="delete">
+              <button class="btn sm danger" type="submit">Xoá</button>
+            </form>
+          </div>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <div class="empty">Không có key nào phù hợp.</div>
+  {% endif %}
+</div>
+{% endblock %}

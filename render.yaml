@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: evolutionz-v2
+    runtime: python
+    plan: free
+    region: singapore
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: APP_NAME
+        value: EVOLUTIONZ V2
+      - key: GAME_ID
+        value: PUBG
+      - key: TOKEN_PREFIX
+        value: PUBG
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: ADMIN_USER
+        value: admin
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: SIGNING_KEY_PEM
+        sync: false
+      - key: TICKET_SECRET
+        generateValue: true
+      - key: REDIS_URL
+        sync: false
