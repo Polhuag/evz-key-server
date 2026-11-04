@@ -1,0 +1,70 @@
+{% extends "admin_base.html" %}
+{% block title %}Tạo key · {{ app }}{% endblock %}
+{% block crumb %}Key / Tạo key{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Tạo key</h1>
+    <p class="page-desc">Key được tạo ngay và có thể dùng để đăng nhập</p>
+  </div>
+  <div class="page-actions"><a class="btn" href="/admin/keys">Quay lại</a></div>
+</div>
+
+<form method="post" action="/admin/keys/create">
+<div class="card" style="max-width:720px">
+  <div class="card-head"><h2 class="card-title">Thông tin key</h2></div>
+  <div class="card-body">
+    <div class="form-row">
+      <div class="field">
+        <label for="count">Số lượng</label>
+        <input id="count" name="count" type="number" value="1" min="1" max="200" required>
+        <div class="hint">Tối đa 200 key mỗi lần</div>
+      </div>
+      <div class="field">
+        <label for="days">Số ngày</label>
+        <input id="days" name="days" type="number" value="30" min="0" max="3650" required>
+        <div class="hint">0 = vĩnh viễn</div>
+      </div>
+      <div class="field">
+        <label for="device_limit">Giới hạn thiết bị</label>
+        <select id="device_limit" name="device_limit">
+          <option value="1" selected>1 thiết bị</option>
+          <option value="2">2 thiết bị</option>
+          <option value="3">3 thiết bị</option>
+          <option value="5">5 thiết bị</option>
+        </select>
+        <div class="hint">Key gắn với HWID khi đăng nhập</div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="note">Ghi chú</label>
+      <input id="note" name="note" type="text" placeholder="VD: khách Zalo 04/11" maxlength="120">
+      <div class="hint">Chỉ hiển thị trong panel, không gửi về client</div>
+    </div>
+
+    <div class="check-row">
+      <input id="free" name="free" type="checkbox" value="1">
+      <div>
+        <label for="free">Đưa vào kho key free</label>
+        <div class="hint">Key sẽ nằm trong kho phát miễn phí (nếu bật phát key free ở Cài đặt)</div>
+      </div>
+    </div>
+  </div>
+  <div class="card-head" style="border-top:1px solid var(--border);border-bottom:0;justify-content:flex-end">
+    <a class="btn" href="/admin/keys">Huỷ</a>
+    <button class="btn primary" type="submit">Tạo key</button>
+  </div>
+</div>
+</form>
+
+<div class="card" style="max-width:720px;margin-top:16px">
+  <div class="card-body">
+    <div class="kv">
+      <div class="k">Định dạng</div><div class="v mono">EVZ-XXXX-XXXX-XXXX-XXXX</div>
+      <div class="k">Bảo mật</div><div class="v">Khoá theo HWID, chữ ký RSA-2048 khi đăng nhập</div>
+      <div class="k">Gia hạn</div><div class="v">Cộng thêm ngày vào hạn hiện tại trong trang Key</div>
+    </div>
+  </div>
+</div>
+{% endblock %}

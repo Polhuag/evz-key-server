@@ -1,19 +1,44 @@
 {% extends "base.html" %}
+{% block title %}{{ app }}{% endblock %}
 {% block body %}
-<div class="hero">
-  <div class="card">
-    <div class="logo">EV</div>
-    <h1>{{ app }}</h1>
-    <p>Key system chính thức. Mở game và đăng nhập bằng key để sử dụng mod.<br>
-       Bản mod luôn tự động cập nhật — không cần tải lại APK.</p>
-    <div class="meta">
-      <span class="chip"><span class="dot"></span> Server hoạt động</span>
-      {% if lib %}<span class="chip">Bản mod v{{ lib.version }}</span>{% endif %}
-      <span class="chip">Bảo mật RSA-2048</span>
+<div class="land">
+  <div class="land-card">
+    <div class="land-brand">
+      <div class="brand-mark">EV</div>
+      <div>
+        <div class="land-name">{{ app }}</div>
+        <div class="land-sub">Key system chính thức</div>
+      </div>
     </div>
-    <div style="margin-top:24px">
+
+    <p class="land-text">Mở game và đăng nhập bằng key để sử dụng mod. Bản mod tự động cập nhật khi đăng nhập, không cần tải lại APK.</p>
+
+    <div class="land-rows">
+      <div class="land-row"><span>Trạng thái</span><b class="st"><span class="dot"></span> Hoạt động</b></div>
+      <div class="land-row"><span>Bản mod</span><b class="mono">{{ lib.version if lib else '—' }}</b></div>
+      <div class="land-row"><span>Phát hành</span><b class="small">{{ fmt(lib.uploaded) if lib else '—' }}</b></div>
+      <div class="land-row"><span>Xác thực</span><b class="small">RSA-2048 · SHA-256</b></div>
+    </div>
+
+    <div class="land-actions">
       <a class="btn" href="/admin/login">Quản trị</a>
+      <a class="btn" href="/healthz">Kiểm tra server</a>
     </div>
   </div>
 </div>
+<style>
+.land{min-height:100vh;display:grid;place-items:center;padding:24px}
+.land-card{width:100%;max-width:420px;background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:22px}
+.land-brand{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+.land-name{font-size:14px;font-weight:600}
+.land-sub{font-size:12px;color:var(--muted2)}
+.land-text{font-size:13px;color:var(--muted);margin:0 0 16px;line-height:1.55}
+.land-rows{border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;margin-bottom:16px}
+.land-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 12px;border-bottom:1px solid var(--border);font-size:12.5px}
+.land-row:last-child{border-bottom:0}
+.land-row span{color:var(--muted)}
+.land-row .st{display:inline-flex;align-items:center;gap:6px;color:var(--ok);font-weight:500}
+.land-actions{display:flex;gap:8px}
+.land-actions .btn{flex:1}
+</style>
 {% endblock %}

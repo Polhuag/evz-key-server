@@ -1,25 +1,65 @@
 {% extends "base.html" %}
+{% macro icon(name) -%}
+{% if name == 'home' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+{% elif name == 'keys' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="8" cy="15" r="4"/><path d="M10.8 12.2 20 3M16 7l3 3M14 9l3 3"/></svg>
+{% elif name == 'devices' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18.5h2"/></svg>
+{% elif name == 'releases' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M21 8.5 12 3 3 8.5v7L12 21l9-5.5v-7Z"/><path d="M3 8.5 12 14l9-5.5M12 14v7"/></svg>
+{% elif name == 'free' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 10h16v10H4z"/><path d="M2 6h20v4H2zM12 6v14"/><path d="M12 6C9.5 6 8 4.8 8 3.5S9 1.5 10 1.5 12 3 12 6Zm0 0c2.5 0 4-1.2 4-2.5S15 1.5 14 1.5 12 3 12 6Z"/></svg>
+{% elif name == 'settings' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2" fill="var(--panel)"/><circle cx="15" cy="12" r="2" fill="var(--panel)"/><circle cx="8" cy="18" r="2" fill="var(--panel)"/></svg>
+{% endif %}
+{%- endmacro %}
 {% block body %}
-<div class="wrap">
-  <aside class="side">
+<div class="app">
+  <aside class="sidebar">
     <div class="brand">
-      <div class="logo">EV</div>
-      <div><b>{{ app }}</b><span>KEY PANEL</span></div>
+      <div class="brand-mark">EV</div>
+      <div style="min-width:0">
+        <div class="brand-name">{{ app }}</div>
+        <div class="brand-sub">Key system</div>
+      </div>
     </div>
     <nav class="nav">
-      <a href="/admin" class="{{ 'on' if page=='home' else '' }}"><i>◈</i> Tổng quan</a>
-      <a href="/admin/keys" class="{{ 'on' if page=='keys' else '' }}"><i>⌘</i> Quản lý Key</a>
-      <a href="/admin/lib" class="{{ 'on' if page=='lib' else '' }}"><i>⬢</i> Bản mod (.so)</a>
-      <a href="/admin/logs" class="{{ 'on' if page=='logs' else '' }}"><i>≡</i> Lịch sử đăng nhập</a>
-      <a href="/admin/settings" class="{{ 'on' if page=='settings' else '' }}"><i>⚙</i> Cài đặt</a>
+      <div class="nav-label">Quản lý</div>
+      <a class="nav-item {{ 'active' if page_name=='home' }}" href="/admin">{{ icon('home') }}<span>Tổng quan</span></a>
+      <a class="nav-item {{ 'active' if page_name=='keys' }}" href="/admin/keys">{{ icon('keys') }}<span>Key</span><span class="count">{{ stats.total }}</span></a>
+      <a class="nav-item {{ 'active' if page_name=='devices' }}" href="/admin/devices">{{ icon('devices') }}<span>Thiết bị</span><span class="count">{{ stats.online }}</span></a>
+      <div class="nav-label">Phát hành</div>
+      <a class="nav-item {{ 'active' if page_name=='releases' }}" href="/admin/releases">{{ icon('releases') }}<span>Bản mod</span></a>
+      <a class="nav-item {{ 'active' if page_name=='free' }}" href="/admin/free-stock">{{ icon('free') }}<span>Kho key free</span><span class="count">{{ stats.free_pool }}</span></a>
+      <div class="nav-label">Hệ thống</div>
+      <a class="nav-item {{ 'active' if page_name=='settings' }}" href="/admin/settings">{{ icon('settings') }}<span>Cài đặt</span></a>
     </nav>
-    <div class="foot">
-      EVOLUTIONZ KEY SYSTEM<br>
-      Phiên bản bảo mật RSA-2048
+    <div class="side-foot">
+      <div class="user">
+        <div class="avatar">{{ (user_name or 'A')[0]|upper }}</div>
+        <div style="min-width:0">
+          <div class="user-name">{{ user_name or 'admin' }}</div>
+          <div class="user-role">Quản trị viên</div>
+        </div>
+      </div>
+      <form method="post" action="/admin/logout"><button class="logout" type="submit">Đăng xuất</button></form>
     </div>
   </aside>
-  <main class="main">
-    {% block content %}{% endblock %}
-  </main>
+
+  <div class="main">
+    <header class="topbar">
+      <button class="hamburger" id="hamburger" type="button" aria-label="Mở menu">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+      <div class="crumbs">
+        <span>{{ app }}</span><span class="sep">/</span><b>{% block crumb %}Tổng quan{% endblock %}</b>
+      </div>
+      <form class="top-search" method="get" action="/admin/keys">
+        <input name="q" value="{{ q or '' }}" placeholder="Tìm key, thiết bị, ghi chú" data-search>
+        <span class="kbd">/</span>
+      </form>
+      <div class="server"><span class="dot"></span> Server ổn định</div>
+      <div class="avatar" title="{{ user_name or 'admin' }}">{{ (user_name or 'A')[0]|upper }}</div>
+    </header>
+
+    <div class="content">
+      {% block content %}{% endblock %}
+    </div>
+  </div>
 </div>
 {% endblock %}

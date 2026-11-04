@@ -1,92 +1,89 @@
 {% extends "admin_base.html" %}
-{% set page='home' %}
 {% block title %}Tổng quan · {{ app }}{% endblock %}
+{% block crumb %}Tổng quan{% endblock %}
 {% block content %}
-<div class="top">
+<div class="page-head">
   <div>
-    <h1>Tổng quan hệ thống</h1>
-    <p>Quản lý key, thiết bị và bản mod phát hành cho {{ app }}</p>
+    <h1 class="page-title">Tổng quan</h1>
+    <p class="page-desc">Tình trạng key, thiết bị và bản mod đang phát hành</p>
   </div>
-  <span class="chip"><span class="dot"></span> Online {{ stats.online }} thiết bị</span>
-</div>
-
-<div class="grid g4" style="margin-bottom:16px">
-  <div class="card stat">
-    <div class="k">Tổng key</div>
-    <div class="v">{{ stats.total }}</div>
-    <div class="s">Đã dùng: {{ stats.used }}</div>
-  </div>
-  <div class="card stat green">
-    <div class="k">Đang hoạt động</div>
-    <div class="v">{{ stats.active }}</div>
-    <div class="s">Còn hạn và không bị khoá</div>
-  </div>
-  <div class="card stat cyan">
-    <div class="k">Hết hạn</div>
-    <div class="v">{{ stats.expired }}</div>
-    <div class="s">Bị khoá: {{ stats.banned }}</div>
-  </div>
-  <div class="card stat red">
-    <div class="k">Key free còn lại</div>
-    <div class="v">{{ stats.free_pool }}</div>
-    <div class="s">Trong kho phát free</div>
+  <div class="page-actions">
+    <a class="btn" href="/admin/keys/new">Tạo key</a>
+    <a class="btn primary" href="/admin/releases">Phát hành bản mod</a>
   </div>
 </div>
 
-<div class="grid g2" style="margin-bottom:16px">
+<div class="statrow" style="margin-bottom:16px">
+  <div class="stat"><div class="k">Tổng key</div><div class="v">{{ stats.total }}</div><div class="s">{{ stats.used }} đã dùng</div></div>
+  <div class="stat"><div class="k">Đang hoạt động</div><div class="v">{{ stats.active }}</div><div class="s">{{ stats.expired }} hết hạn · {{ stats.banned }} bị khoá</div></div>
+  <div class="stat"><div class="k">Thiết bị</div><div class="v">{{ stats.devices }}</div><div class="s">{{ stats.online }} online 15 phút</div></div>
+  <div class="stat"><div class="k">Key free</div><div class="v">{{ stats.free_pool }}</div><div class="s">trong kho phát</div></div>
+</div>
+
+<div style="display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:16px" class="dash-grid">
   <div class="card">
-    <h2 class="sec">Bản mod đang phát hành</h2>
-    {% if lib %}
-      <div class="row" style="justify-content:space-between">
-        <div>
-          <div style="font-size:19px;font-weight:800">v{{ lib.version }}</div>
-          <div class="note" style="margin-top:5px">{{ (lib.size/1048576)|round(2) }} MB · cập nhật {{ fmt(lib.uploaded) }}</div>
-          <div class="note mono" style="margin-top:3px;word-break:break-all">{{ lib.md5 }}</div>
+    <div class="card-head"><h2 class="card-title">Cần chú ý</h2></div>
+    <div class="card-body tight">
+      {% if soon %}
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Key</th><th>Hết hạn</th><th>Ghi chú</th></tr></thead>
+          <tbody>
+          {% for k in soon %}
+            <tr>
+              <td data-label="Key" class="mono copy" data-copy="{{ k.k }}">{{ k.k }}</td>
+              <td data-label="Hết hạn" class="small">{{ fmt(k.expires) }}</td>
+              <td data-label="Ghi chú" class="small muted">{{ k.note or '—' }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty"><p>Không có key nào hết hạn trong 3 ngày tới.</p></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h2 class="card-title">Bản mod</h2>
+      {% if lib %}<a class="btn sm" style="margin-left:auto" href="/admin/releases">Quản lý</a>{% endif %}
+    </div>
+    <div class="card-body">
+      {% if lib %}
+        <div class="kv">
+          <div class="k">Phiên bản</div><div class="v"><b>{{ lib.version }}</b> {% if lib.mandatory %}<span class="badge warn">Bắt buộc</span>{% endif %}</div>
+          <div class="k">Kích thước</div><div class="v num">{{ (lib.size/1048576)|round(2) }} MB</div>
+          <div class="k">Phát hành</div><div class="v">{{ fmt(lib.uploaded) }}</div>
         </div>
-        <span class="badge {{ 'b-ok' if lib.mandatory else 'b-mut' }}">{{ 'Bắt buộc cập nhật' if lib.mandatory else 'Tuỳ chọn' }}</span>
-      </div>
-      {% if lib.notes %}<div class="alert warn" style="margin:14px 0 0">{{ lib.notes }}</div>{% endif %}
-      <div class="bar"><i style="width:100%"></i></div>
-      <div style="margin-top:14px"><a class="btn sm" href="/admin/lib">Quản lý bản mod</a></div>
-    {% else %}
-      <div class="empty">Chưa có bản mod nào được tải lên.<br><a class="btn sm" style="margin-top:12px" href="/admin/lib">Tải lên libMyLibName.so</a></div>
-    {% endif %}
-  </div>
-
-  <div class="card">
-    <h2 class="sec">Tạo key nhanh</h2>
-    <form method="post" action="/admin/keys/create">
-      <div class="row" style="margin-bottom:12px">
-        <div class="field"><label>Số lượng</label><input name="count" type="number" value="1" min="1" max="200"></div>
-        <div class="field"><label>Số ngày</label><input name="days" type="number" value="30" min="0" max="3650"></div>
-        <div class="field"><label>Thiết bị</label><input name="device_limit" type="number" value="1" min="1" max="5"></div>
-      </div>
-      <div class="field"><label>Ghi chú</label><input name="note" placeholder="VD: khách zalo 04/11"></div>
-      <label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:12px;color:var(--mut)">
-        <input type="checkbox" name="free" value="1" style="width:auto"> Đưa vào kho key free
-      </label>
-      <button class="btn primary" style="width:100%;margin-top:12px" type="submit">Tạo key</button>
-    </form>
+        {% if lib.notes %}<div class="small muted" style="margin-top:10px;white-space:pre-wrap">{{ lib.notes }}</div>{% endif %}
+      {% else %}
+        <div class="empty"><p>Chưa phát hành bản mod nào.</p><a class="btn" href="/admin/releases">Tải lên .so</a></div>
+      {% endif %}
+    </div>
   </div>
 </div>
 
-<div class="card">
-  <h2 class="sec">Đăng nhập gần đây</h2>
+<div class="card" style="margin-top:16px">
+  <div class="card-head"><h2 class="card-title">Đăng nhập gần đây</h2></div>
   {% if logs %}
-  <table>
-    <thead><tr><th>Thời gian</th><th>Key</th><th>Thiết bị</th><th>IP</th><th>Kết quả</th></tr></thead>
-    <tbody>
-    {% for l in logs %}
-      <tr>
-        <td class="note">{{ fmt(l.t) }}</td>
-        <td class="mono">{{ l.key }}</td>
-        <td class="mono">{{ l.serial }}</td>
-        <td class="note">{{ l.ip }}</td>
-        <td>{% if l.ok %}<span class="badge b-ok">OK</span>{% else %}<span class="badge b-bad">{{ l.r }}</span>{% endif %}</td>
-      </tr>
-    {% endfor %}
-    </tbody>
-  </table>
-  {% else %}<div class="empty">Chưa có lượt đăng nhập nào.</div>{% endif %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Thời gian</th><th>Key</th><th>Thiết bị</th><th>IP</th><th>Kết quả</th></tr></thead>
+      <tbody>
+      {% for l in logs %}
+        <tr>
+          <td data-label="Thời gian" class="small">{{ fmt(l.t) }}</td>
+          <td data-label="Key" class="mono">{{ l.key }}</td>
+          <td data-label="Thiết bị" class="mono">{{ l.serial }}</td>
+          <td data-label="IP" class="small muted">{{ l.ip }}</td>
+          <td data-label="Kết quả">{% if l.ok %}<span class="badge ok">OK</span>{% else %}<span class="badge bad">{{ l.r }}</span>{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}<div class="empty"><p>Chưa có lượt đăng nhập nào.</p></div>{% endif %}
 </div>
+<style>@media(max-width:900px){.dash-grid{grid-template-columns:1fr!important}}</style>
 {% endblock %}

@@ -1,52 +1,99 @@
 {% extends "admin_base.html" %}
-{% set page='settings' %}
 {% block title %}Cài đặt · {{ app }}{% endblock %}
+{% block crumb %}Cài đặt{% endblock %}
 {% block content %}
-<div class="top">
+<div class="page-head">
   <div>
-    <h1>Cài đặt</h1>
-    <p>Tài khoản quản trị và tuỳ chọn hệ thống</p>
+    <h1 class="page-title">Cài đặt</h1>
+    <p class="page-desc">Tài khoản quản trị, phát key free và sao lưu dữ liệu</p>
   </div>
 </div>
 
-{% if ok %}<div class="alert ok">Đã lưu thay đổi.</div>{% endif %}
-{% if err == 'short' %}<div class="alert bad">Mật khẩu phải từ 6 ký tự.</div>{% endif %}
-{% if err == 'match' %}<div class="alert bad">Hai mật khẩu không khớp.</div>{% endif %}
+{% if ok == '1' %}<div class="alert ok">Đã lưu thay đổi.</div>{% endif %}
+{% if err == 'short' %}<div class="alert bad">Mật khẩu phải có ít nhất 6 ký tự.</div>{% endif %}
+{% if err == 'match' %}<div class="alert bad">Hai mật khẩu không khớp nhau.</div>{% endif %}
+{% if err == 'backup' %}<div class="alert bad">File sao lưu không hợp lệ.</div>{% endif %}
 
-<div class="grid g2">
-  <div class="card">
-    <h2 class="sec">Đổi tài khoản quản trị</h2>
-    <form method="post" action="/admin/settings/password">
-      <div class="field"><label>Tài khoản</label><input name="username" value="{{ user }}" required></div>
-      <div class="field"><label>Mật khẩu mới</label><input name="password" type="password" minlength="6" required></div>
-      <div class="field"><label>Nhập lại mật khẩu</label><input name="password2" type="password" minlength="6" required></div>
-      <button class="btn primary" type="submit">Lưu &amp; đăng xuất</button>
-    </form>
-    <div class="note" style="margin-top:12px">Đổi mật khẩu sẽ đăng xuất mọi phiên hiện tại.</div>
+<div class="settings-grid">
+  <div>
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-head"><h2 class="card-title">Tài khoản quản trị</h2></div>
+      <div class="card-body">
+        <form method="post" action="/admin/settings/password">
+          <div class="field">
+            <label for="username">Tên đăng nhập</label>
+            <input id="username" name="username" type="text" value="{{ user or 'admin' }}" required autocomplete="username">
+          </div>
+          <div class="form-row two">
+            <div class="field">
+              <label for="password">Mật khẩu mới</label>
+              <input id="password" name="password" type="password" minlength="6" required autocomplete="new-password">
+              <div class="hint">Tối thiểu 6 ký tự</div>
+            </div>
+            <div class="field">
+              <label for="password2">Nhập lại mật khẩu</label>
+              <input id="password2" name="password2" type="password" minlength="6" required autocomplete="new-password">
+            </div>
+          </div>
+          <div class="alert warn" style="margin-bottom:12px">Đổi thông tin đăng nhập sẽ đăng xuất mọi phiên hiện tại.</div>
+          <button class="btn primary" type="submit">Lưu thay đổi</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-head">
+        <h2 class="card-title">Phát key free</h2>
+        <span class="badge {{ 'ok' if free_on else 'mut' }}" style="margin-left:auto">{{ 'Đang bật' if free_on else 'Đang tắt' }}</span>
+      </div>
+      <div class="card-body">
+        <p class="page-desc" style="margin:0 0 12px">Khi bật, thiết bị gọi API <span class="mono">/api/free</span> sẽ nhận 1 key trong kho free. Mỗi thiết bị nhận tối đa 1 key mỗi 7 ngày.</p>
+        <form method="post" action="/admin/settings/free">
+          <input type="hidden" name="enabled" value="{{ '' if free_on else '1' }}">
+          <button class="btn {{ 'danger' if free_on else 'primary' }}" type="submit">{{ 'Tắt phát key free' if free_on else 'Bật phát key free' }}</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2 class="card-title">Sao lưu</h2></div>
+      <div class="card-body">
+        <div class="field">
+          <label>Tải dữ liệu</label>
+          <a class="btn" href="/admin/backup">Tải file JSON</a>
+          <div class="hint">Gồm toàn bộ key và thông tin bản mod đang phát hành</div>
+        </div>
+        <form method="post" action="/admin/restore" enctype="multipart/form-data">
+          <div class="field">
+            <label for="backup">Khôi phục từ file</label>
+            <input id="backup" name="file" type="file" accept=".json,application/json" required>
+            <div class="hint">Key trùng sẽ được ghi đè, không xoá key hiện có</div>
+          </div>
+          <button class="btn" type="submit">Khôi phục</button>
+        </form>
+      </div>
+    </div>
   </div>
 
-  <div class="card">
-    <h2 class="sec">Key free</h2>
-    <form method="post" action="/admin/settings/free">
-      <label style="display:flex;align-items:center;gap:9px;text-transform:none;font-size:12.5px;color:var(--txt);margin-bottom:14px">
-        <input type="checkbox" name="enabled" value="1" {{ 'checked' if free_on }} style="width:auto">
-        Cho phép thiết bị nhận 1 key free (mỗi máy 1 lần / 7 ngày)
-      </label>
-      <button class="btn" type="submit">Lưu</button>
-    </form>
-    <div class="note" style="margin-top:12px">
-      Key free lấy từ kho key được tạo với nhãn “Key free”. Nên tắt nếu không muốn phát key miễn phí.
+  <div>
+    <div class="card">
+      <div class="card-head"><h2 class="card-title">Hệ thống</h2></div>
+      <div class="card-body">
+        <div class="kv">
+          <div class="k">Tên dịch vụ</div><div class="v">{{ app }}</div>
+          <div class="k">Trò chơi</div><div class="v mono">{{ game }}</div>
+          <div class="k">Xác thực</div><div class="v">RSA-2048 PKCS#1 v1.5 · SHA-256</div>
+          <div class="k">Phiên admin</div><div class="v">Cookie HttpOnly · SameSite Strict</div>
+          <div class="k">Chống dò key</div><div class="v">Giới hạn theo IP và theo key</div>
+        </div>
+        <div class="alert info" style="margin:14px 0 0">Khoá ký nằm trên server. Client chỉ giữ khoá công khai nên không thể giả lập phản hồi hợp lệ.</div>
+      </div>
     </div>
   </div>
 </div>
 
-<div class="card" style="margin-top:16px">
-  <h2 class="sec">Bảo mật</h2>
-  <div class="note">
-    · Mọi phản hồi đăng nhập được ký <b>RSA-2048 / SHA-256</b>; client chỉ giữ khoá công khai nên không thể tự tạo key.<br>
-    · Key bị khoá theo HWID (mặc định 1 thiết bị), có thể reset trong mục Quản lý Key.<br>
-    · Giới hạn tần suất đăng nhập theo IP và theo key.<br>
-    · File lib chỉ tải được bằng ticket ngắn hạn phát ra sau khi đăng nhập hợp lệ.
-  </div>
-</div>
+<style>
+.settings-grid{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:16px;align-items:start}
+@media(max-width:900px){.settings-grid{grid-template-columns:1fr}}
+</style>
 {% endblock %}

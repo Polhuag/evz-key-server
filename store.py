@@ -90,6 +90,7 @@ class SqliteKV(KV):
     def delete(self, k):
         with self.lock:
             self.c.execute("DELETE FROM kv WHERE k=?", (k,))
+            self.c.execute("DELETE FROM lists WHERE k=?", (k,))
             self.c.commit()
 
     def keys(self, prefix=""):

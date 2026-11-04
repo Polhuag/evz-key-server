@@ -1,0 +1,71 @@
+{% extends "admin_base.html" %}
+{% block title %}Thiết bị · {{ app }}{% endblock %}
+{% block crumb %}Thiết bị{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Thiết bị</h1>
+    <p class="page-desc">{{ devices|length }} thiết bị · {{ stats.online }} online trong 15 phút</p>
+  </div>
+</div>
+
+<div class="card">
+  <div class="toolbar">
+    <div class="tabs">
+      <a class="{{ 'on' if not state }}" href="/admin/devices?q={{ q }}">Tất cả</a>
+      <a class="{{ 'on' if state=='online' }}" href="/admin/devices?state=online&q={{ q }}">Online</a>
+      <a class="{{ 'on' if state=='offline' }}" href="/admin/devices?state=offline&q={{ q }}">Offline</a>
+      <a class="{{ 'on' if state=='blocked' }}" href="/admin/devices?state=blocked&q={{ q }}">Bị chặn</a>
+    </div>
+    <form class="search-inline spacer" method="get" action="/admin/devices">
+      <input type="hidden" name="state" value="{{ state }}">
+      <input name="q" value="{{ q }}" placeholder="Tìm HWID hoặc key" data-search>
+    </form>
+  </div>
+
+  {% if devices %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Thiết bị</th><th>Key</th><th>Trạng thái</th><th>Lần cuối</th><th>IP</th><th style="width:150px"></th></tr>
+      </thead>
+      <tbody>
+      {% for d in devices %}
+        <tr>
+          <td data-label="Thiết bị"><span class="mono copy" data-copy="{{ d.serial }}">{{ mask(d.serial, 5) }}</span></td>
+          <td data-label="Key" class="mono">
+            {% for k in d['keys'][:2] %}<div class="copy" data-copy="{{ k.k }}">{{ k.k }}</div>{% endfor %}
+            {% if d['keys']|length > 2 %}<div class="muted small">+{{ d['keys']|length - 2 }} key</div>{% endif %}
+          </td>
+          <td data-label="Trạng thái">
+            {% if d.blocked %}<span class="badge bad">Bị chặn</span>
+            {% elif d.online %}<span class="badge ok">Online</span>
+            {% else %}<span class="badge mut">Offline</span>{% endif %}
+          </td>
+          <td data-label="Lần cuối" class="small">{{ fmt(d.last_seen) if d.last_seen else '—' }}</td>
+          <td data-label="IP" class="small muted">{{ d.last_ip or '—' }}</td>
+          <td class="actions">
+            <form method="post" action="/admin/devices/action" style="display:inline">
+              <input type="hidden" name="serial" value="{{ d.serial }}">
+              <input type="hidden" name="action" value="unbind">
+              <button class="btn sm" type="submit" title="Gỡ thiết bị khỏi mọi key">Gỡ liên kết</button>
+            </form>
+            <form method="post" action="/admin/devices/action" style="display:inline">
+              <input type="hidden" name="serial" value="{{ d.serial }}">
+              <input type="hidden" name="action" value="{{ 'unblock' if d.blocked else 'block' }}">
+              <button class="btn sm {{ '' if d.blocked else 'danger' }}" type="submit">{{ 'Bỏ chặn' if d.blocked else 'Chặn' }}</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">
+    <p>Chưa có thiết bị nào đăng nhập.</p>
+    <a class="btn" href="/admin/keys/new">Tạo key để bắt đầu</a>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

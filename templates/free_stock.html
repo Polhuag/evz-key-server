@@ -1,0 +1,88 @@
+{% extends "admin_base.html" %}
+{% block title %}Kho key free · {{ app }}{% endblock %}
+{% block crumb %}Kho key free{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Kho key free</h1>
+    <p class="page-desc">{{ pool|length }} key sẵn sàng · phát free đang {{ 'bật' if enabled else 'tắt' }}</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn" href="/admin/settings">{{ 'Tắt phát free' if enabled else 'Bật phát free' }}</a>
+  </div>
+</div>
+
+{% if ok %}<div class="alert ok">Đã thêm key vào kho free.</div>{% endif %}
+{% if not enabled %}
+<div class="alert warn">Phát key free đang tắt — thiết bị gọi API sẽ nhận thông báo tính năng đang tắt. Bật trong Cài đặt.</div>
+{% endif %}
+
+<div class="card" style="margin-bottom:16px">
+  <div class="card-head"><h2 class="card-title">Thêm key vào kho</h2></div>
+  <div class="card-body">
+    <form method="post" action="/admin/free-stock/add" class="form-row two" style="align-items:end">
+      <div class="field" style="margin:0">
+        <label for="count">Số lượng</label>
+        <input id="count" name="count" type="number" value="10" min="1" max="100">
+      </div>
+      <div class="field" style="margin:0">
+        <label for="days">Số ngày dùng thử</label>
+        <input id="days" name="days" type="number" value="3" min="1" max="365">
+      </div>
+      <div class="field" style="margin:0">
+        <label>&nbsp;</label>
+        <button class="btn primary" type="submit">Thêm vào kho</button>
+      </div>
+    </form>
+    <div class="hint" style="margin-top:8px">Mỗi thiết bị chỉ nhận được 1 key free trong 7 ngày.</div>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:16px">
+  <div class="card-head"><h2 class="card-title">Key sẵn sàng</h2><span class="muted small" style="margin-left:auto">{{ pool|length }}</span></div>
+  {% if pool %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Key</th><th>Hạn dùng</th><th>Tạo</th><th style="width:90px"></th></tr></thead>
+      <tbody>
+      {% for k in pool %}
+        <tr>
+          <td data-label="Key"><span class="mono copy" data-copy="{{ k.k }}">{{ k.k }}</span></td>
+          <td data-label="Hạn dùng" class="small">{{ fmt(k.expires) if k.expires else 'Vĩnh viễn' }}</td>
+          <td data-label="Tạo" class="small muted">{{ fmt(k.created) }}</td>
+          <td class="actions">
+            <form method="post" action="/admin/free-stock/remove" onsubmit="return confirm('Xoá key này khỏi kho?')">
+              <input type="hidden" name="key" value="{{ k.k }}">
+              <button class="btn sm danger" type="submit">Xoá</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty"><p>Kho đang trống.</p></div>
+  {% endif %}
+</div>
+
+<div class="card">
+  <div class="card-head"><h2 class="card-title">Đã phát gần đây</h2></div>
+  {% if claimed %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Key</th><th>Thiết bị</th><th>Nhận lúc</th></tr></thead>
+      <tbody>
+      {% for k in claimed %}
+        <tr>
+          <td data-label="Key" class="mono">{{ k.k }}</td>
+          <td data-label="Thiết bị" class="mono">{{ mask(k.serials[0], 4) if k.serials else '—' }}</td>
+          <td data-label="Nhận lúc" class="small">{{ fmt(k.used) }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}<div class="empty"><p>Chưa phát key free nào.</p></div>{% endif %}
+</div>
+{% endblock %}

@@ -332,10 +332,13 @@ def api_lib_file(ticket: str = "", game: str = ""):
     game = game or GAME_ID
     if not ticket_check(ticket, game):
         raise HTTPException(status_code=403, detail="invalid ticket")
-    blob = kv.get("lib:%s:blob" % game)
+    meta = lib_meta(game) or {}
+    rid = meta.get("id")
+    blob = kv.get("lib:%s:blob:%s" % (game, rid)) if rid else None
+    if not blob:
+        blob = kv.get("lib:%s:blob" % game)
     if not blob:
         raise HTTPException(status_code=404, detail="no lib")
-    meta = lib_meta(game) or {}
     headers = {"X-Lib-Version": str(meta.get("version", "")), "X-Lib-Md5": str(meta.get("md5", ""))}
     return Response(content=blob, media_type="application/octet-stream", headers=headers)
 
@@ -382,6 +385,23 @@ def _boot_auth():
 
 
 _boot_auth()
+
+
+def _boot_lib():
+    meta = lib_meta(GAME_ID)
+    if not meta:
+        return
+    if not meta.get("id"):
+        meta["id"] = "%d-%s" % (int(meta.get("uploaded") or now_ts()), secrets.token_hex(3))
+        blob = kv.get("lib:%s:blob" % GAME_ID)
+        if blob:
+            kv.set("lib:%s:blob:%s" % (GAME_ID, meta["id"]), blob)
+        kv.set("lib:%s:meta" % GAME_ID, json.dumps(meta, ensure_ascii=False).encode())
+    if not kv.lrange("lib:%s:releases" % GAME_ID, 0, 0):
+        kv.lpush("lib:%s:releases" % GAME_ID, json.dumps(meta, ensure_ascii=False).encode())
+
+
+_boot_lib()
 
 
 def auth_user():
@@ -435,82 +455,109 @@ def admin_guard(request: Request):
         raise HTTPException(status_code=307, headers={"Location": "/admin/login"})
 
 
+def key_status(rec, t=None):
+    t = t or now_ts()
+    if rec.get("banned"):
+        return "banned"
+    if rec.get("expires") and rec["expires"] <= t:
+        return "expired"
+    if not rec.get("used"):
+        return "unused"
+    return "active"
+
+
+STATUS_LABEL = {"active": "Hoạt động", "unused": "Chưa dùng", "expired": "Hết hạn", "banned": "Bị khoá"}
+
+
+def is_blocked(serial):
+    return kv.get("devblk:" + serial) is not None
+
+
+def all_devices():
+    t = now_ts()
+    out = {}
+    for rec in all_keys():
+        for s in rec.get("serials") or []:
+            d = out.get(s)
+            if not d:
+                d = {"serial": s, "keys": [], "last_seen": 0, "last_ip": "", "blocked": is_blocked(s)}
+                out[s] = d
+            d["keys"].append(rec)
+            if (rec.get("last_seen") or 0) > d["last_seen"]:
+                d["last_seen"] = rec["last_seen"]
+                d["last_ip"] = rec.get("last_ip") or ""
+    devs = list(out.values())
+    for d in devs:
+        d["online"] = d["last_seen"] > t - 900
+        d["primary"] = max(d["keys"], key=lambda k: k.get("last_seen") or 0)
+    devs.sort(key=lambda d: (-(d["last_seen"] or 0), d["serial"]))
+    return devs
+
+
 def stats():
     keys = all_keys()
     t = now_ts()
-    active = sum(1 for k in keys if not k.get("banned") and (not k.get("expires") or k["expires"] > t))
-    expired = sum(1 for k in keys if k.get("expires") and k["expires"] <= t)
-    banned = sum(1 for k in keys if k.get("banned"))
+    active = sum(1 for k in keys if key_status(k, t) == "active")
+    expired = sum(1 for k in keys if key_status(k, t) == "expired")
+    banned = sum(1 for k in keys if key_status(k, t) == "banned")
     used = sum(1 for k in keys if k.get("used"))
-    logs = recent_logs(1000)
-    online = len({l.get("serial") for l in logs if l.get("ok") and l.get("t", 0) > t - 600})
+    free_pool = len([k for k in keys if k.get("free") and not k.get("used")])
+    devs = all_devices()
+    online = sum(1 for d in devs if d["online"])
+    unused = sum(1 for k in keys if not k.get("used") and not k.get("banned"))
     return {"total": len(keys), "active": active, "expired": expired, "banned": banned,
-            "used": used, "online": online, "free_pool": len(kv.lrange("pool:free", 0, 9999))}
+            "used": used, "online": online, "free_pool": free_pool, "devices": len(devs),
+            "unused": unused}
 
 
-@app.get("/admin/login", response_class=HTMLResponse)
-def admin_login_page(request: Request):
-    if check_session(request):
-        return RedirectResponse("/admin", status_code=303)
-    return templates.TemplateResponse("login.html", {"request": request, "app": APP_NAME})
-
-
-@app.post("/admin/login")
-def admin_login(request: Request, username: str = Form(""), password: str = Form("")):
-    ip = client_ip(request)
-    if not rl.hit("a:" + ip, 8, 600):
-        return templates.TemplateResponse("login.html", {"request": request, "app": APP_NAME,
-                                                         "error": "Sai quá nhiều lần, thử lại sau 10 phút"}, status_code=429)
-    if not auth_ok(username, password):
-        return templates.TemplateResponse("login.html", {"request": request, "app": APP_NAME,
-                                                         "error": "Tài khoản hoặc mật khẩu không đúng",
-                                                         "username": username}, status_code=401)
-    resp = RedirectResponse("/admin", status_code=303)
-    resp.set_cookie("evz_admin", make_session(), max_age=SESSION_HOURS * 3600,
-                    httponly=True, samesite="strict", secure=COOKIE_SECURE)
-    return resp
-
-
-@app.post("/admin/logout")
-def admin_logout():
-    resp = RedirectResponse("/admin/login", status_code=303)
-    resp.delete_cookie("evz_admin")
-    return resp
-
-
-@app.get("/admin", response_class=HTMLResponse)
-def admin_home(request: Request):
-    if not check_session(request):
-        return RedirectResponse("/admin/login", status_code=303)
-    meta = lib_meta(GAME_ID)
-    return templates.TemplateResponse("dashboard.html", {
-        "request": request, "app": APP_NAME, "stats": stats(), "lib": meta,
-        "logs": recent_logs(20), "fmt": fmt_ts, "mask": mask,
-    })
-
-
-@app.get("/admin/keys", response_class=HTMLResponse)
-def admin_keys(request: Request, q: str = "", status: str = ""):
-    if not check_session(request):
-        return RedirectResponse("/admin/login", status_code=303)
+def _key_rows(q, status, sort, direction):
     t = now_ts()
     keys = all_keys()
     if q:
         ql = q.strip().lower()
         keys = [k for k in keys if ql in k["k"].lower() or ql in (k.get("note") or "").lower()
                 or any(ql in s.lower() for s in (k.get("serials") or []))]
-    if status == "active":
-        keys = [k for k in keys if not k.get("banned") and (not k.get("expires") or k["expires"] > t)]
-    elif status == "expired":
-        keys = [k for k in keys if k.get("expires") and k["expires"] <= t]
-    elif status == "banned":
-        keys = [k for k in keys if k.get("banned")]
-    elif status == "unused":
-        keys = [k for k in keys if not k.get("used")]
-    keys.sort(key=lambda x: x.get("created", 0), reverse=True)
+    if status in STATUS_LABEL:
+        keys = [k for k in keys if key_status(k, t) == status]
+    reverse = direction != "asc"
+    if sort == "key":
+        keys.sort(key=lambda k: k["k"], reverse=reverse)
+    elif sort == "status":
+        keys.sort(key=lambda k: key_status(k, t), reverse=reverse)
+    elif sort == "expires":
+        keys.sort(key=lambda k: k.get("expires") or 0, reverse=reverse)
+    elif sort == "last_seen":
+        keys.sort(key=lambda k: k.get("last_seen") or 0, reverse=reverse)
+    else:
+        keys.sort(key=lambda k: k.get("created") or 0, reverse=reverse)
+    return keys, t
+
+
+@app.get("/admin/keys", response_class=HTMLResponse)
+def admin_keys(request: Request, q: str = "", status: str = "", sort: str = "created",
+               dir: str = "desc", page: int = 1):
+    if not check_session(request):
+        return RedirectResponse("/admin/login", status_code=303)
+    keys, t = _key_rows(q, status, sort, dir)
+    per = 25
+    pages = max(1, (len(keys) + per - 1) // per)
+    page = max(1, min(page, pages))
+    rows = keys[(page - 1) * per: page * per]
     return templates.TemplateResponse("keys.html", {
-        "request": request, "app": APP_NAME, "keys": keys[:500], "q": q, "status": status,
-        "fmt": fmt_ts, "mask": mask, "now": t, "stats": stats(),
+        "request": request, "app": APP_NAME, "user_name": auth_user(), "page_name": "keys", "keys": rows,
+        "total": len(keys), "page": page, "pages": pages, "q": q, "status": status,
+        "sort": sort, "dir": dir, "fmt": fmt_ts, "mask": mask, "now": t,
+        "stats": stats(), "status_of": key_status, "labels": STATUS_LABEL,
+        "created": request.query_params.get("created", ""),
+    })
+
+
+@app.get("/admin/keys/new", response_class=HTMLResponse)
+def admin_keys_new(request: Request):
+    if not check_session(request):
+        return RedirectResponse("/admin/login", status_code=303)
+    return templates.TemplateResponse("keys_new.html", {
+        "request": request, "app": APP_NAME, "user_name": auth_user(), "page_name": "keys", "stats": stats(),
     })
 
 
@@ -531,84 +578,287 @@ def admin_keys_create(count: int = Form(1), days: int = Form(30), note: str = Fo
                "note": note[:120], "serials": [], "device_limit": device_limit, "banned": False,
                "free": bool(free), "used": None, "last_seen": None, "last_ip": "", "activations": 0}
         put_key(rec)
-        if free:
-            kv.lpush("pool:free", k.encode())
         out.append(k)
-    resp = RedirectResponse("/admin/keys?created=" + ",".join(out[:50]), status_code=303)
-    return resp
+    return RedirectResponse("/admin/keys?created=" + ",".join(out[:50]), status_code=303)
 
 
 @app.post("/admin/keys/action")
 def admin_keys_action(action: str = Form(...), key: str = Form(...), value: str = Form("")):
     rec = get_key(key.strip().upper())
-    if not rec:
-        return RedirectResponse("/admin/keys", status_code=303)
-    a = action
-    if a == "delete":
-        kv.delete("key:" + rec["k"])
-    elif a == "ban":
-        rec["banned"] = True
-        put_key(rec)
-    elif a == "unban":
-        rec["banned"] = False
-        put_key(rec)
-    elif a == "reset":
-        rec["serials"] = []
-        put_key(rec)
-    elif a == "extend":
-        d = max(1, min(3650, int(value or 1)))
-        base = rec["expires"] if rec.get("expires") and rec["expires"] > now_ts() else now_ts()
-        rec["expires"] = base + d * 86400
-        rec["days"] = int(rec.get("days") or 0) + d
-        put_key(rec)
-    elif a == "limit":
-        rec["device_limit"] = max(1, min(5, int(value or 1)))
-        put_key(rec)
-    return RedirectResponse("/admin/keys", status_code=303)
+    if rec:
+        if action == "delete":
+            kv.delete("key:" + rec["k"])
+        elif action == "ban":
+            rec["banned"] = True
+            put_key(rec)
+        elif action == "unban":
+            rec["banned"] = False
+            put_key(rec)
+        elif action == "reset":
+            rec["serials"] = []
+            put_key(rec)
+        elif action == "extend":
+            d = max(1, min(3650, int(value or 30)))
+            base = rec["expires"] if rec.get("expires") and rec["expires"] > now_ts() else now_ts()
+            rec["expires"] = base + d * 86400
+            rec["days"] = int(rec.get("days") or 0) + d
+            put_key(rec)
+        elif action == "limit":
+            rec["device_limit"] = max(1, min(5, int(value or 1)))
+            put_key(rec)
+        elif action == "free_on":
+            rec["free"] = True
+            put_key(rec)
+        elif action == "free_off":
+            rec["free"] = False
+            put_key(rec)
+    back = request_referer_key()
+    return RedirectResponse(back, status_code=303)
 
 
-@app.get("/admin/lib", response_class=HTMLResponse)
-def admin_lib(request: Request):
+def request_referer_key():
+    return "/admin/keys"
+
+
+@app.post("/admin/keys/bulk")
+def admin_keys_bulk(action: str = Form(...), keys: list[str] = Form([])):
+    done = 0
+    for k in keys:
+        rec = get_key(k.strip().upper())
+        if not rec:
+            continue
+        done += 1
+        if action == "delete":
+            kv.delete("key:" + rec["k"])
+        elif action == "ban":
+            rec["banned"] = True
+            put_key(rec)
+        elif action == "unban":
+            rec["banned"] = False
+            put_key(rec)
+        elif action == "reset":
+            rec["serials"] = []
+            put_key(rec)
+        elif action == "extend":
+            base = rec["expires"] if rec.get("expires") and rec["expires"] > now_ts() else now_ts()
+            rec["expires"] = base + 30 * 86400
+            rec["days"] = int(rec.get("days") or 0) + 30
+            put_key(rec)
+        elif action == "free_on":
+            rec["free"] = True
+            put_key(rec)
+        elif action == "free_off":
+            rec["free"] = False
+            put_key(rec)
+    return RedirectResponse("/admin/keys?bulk=%d" % done, status_code=303)
+
+
+@app.get("/admin/devices", response_class=HTMLResponse)
+def admin_devices(request: Request, q: str = "", state: str = ""):
     if not check_session(request):
         return RedirectResponse("/admin/login", status_code=303)
-    return templates.TemplateResponse("lib.html", {
-        "request": request, "app": APP_NAME, "lib": lib_meta(GAME_ID), "fmt": fmt_ts,
+    devs = all_devices()
+    if q:
+        ql = q.strip().lower()
+        devs = [d for d in devs if ql in d["serial"].lower()
+                or any(ql in k["k"].lower() for k in d["keys"])]
+    if state == "online":
+        devs = [d for d in devs if d["online"]]
+    elif state == "offline":
+        devs = [d for d in devs if not d["online"]]
+    elif state == "blocked":
+        devs = [d for d in devs if d["blocked"]]
+    return templates.TemplateResponse("devices.html", {
+        "request": request, "app": APP_NAME, "user_name": auth_user(), "page_name": "devices", "devices": devs,
+        "q": q, "state": state, "fmt": fmt_ts, "mask": mask, "stats": stats(),
     })
 
 
-@app.post("/admin/lib/upload")
-async def admin_lib_upload(file: UploadFile = File(...), version: str = Form(""),
-                           notes: str = Form(""), mandatory: str = Form("")):
-    blob = await file.read()
-    if not blob:
-        return RedirectResponse("/admin/lib?err=empty", status_code=303)
-    if len(blob) > 64 * 1024 * 1024:
-        return RedirectResponse("/admin/lib?err=size", status_code=303)
-    if blob[:4] != b"\x7fELF":
-        return RedirectResponse("/admin/lib?err=notelf", status_code=303)
-    md5 = hashlib.md5(blob).hexdigest()
-    ver = version.strip() or datetime.now(TZ).strftime("%Y%m%d-%H%M")
-    meta = {"version": ver, "md5": md5, "size": len(blob), "uploaded": now_ts(),
-            "filename": file.filename or "libMyLibName.so",
-            "notes": notes.strip()[:600], "mandatory": bool(mandatory)}
-    kv.set("lib:%s:blob" % GAME_ID, blob)
-    kv.set("lib:%s:meta" % GAME_ID, json.dumps(meta, ensure_ascii=False).encode())
-    return RedirectResponse("/admin/lib?ok=1", status_code=303)
+@app.post("/admin/devices/action")
+def admin_devices_action(serial: str = Form(...), action: str = Form(...)):
+    serial = serial.strip()
+    if action == "unbind":
+        for rec in all_keys():
+            if serial in (rec.get("serials") or []):
+                rec["serials"] = [s for s in rec["serials"] if s != serial]
+                put_key(rec)
+    elif action == "block":
+        kv.set("devblk:" + serial, b"1")
+    elif action == "unblock":
+        kv.delete("devblk:" + serial)
+    return RedirectResponse("/admin/devices", status_code=303)
 
 
-@app.post("/admin/lib/delete")
-def admin_lib_delete():
-    kv.delete("lib:%s:blob" % GAME_ID)
-    kv.delete("lib:%s:meta" % GAME_ID)
-    return RedirectResponse("/admin/lib?ok=2", status_code=303)
+def releases_list():
+    out = []
+    seen = set()
+    for raw in kv.lrange("lib:%s:releases" % GAME_ID, 0, 49):
+        try:
+            it = json.loads(raw.decode())
+        except Exception:
+            continue
+        if it.get("id") in seen:
+            continue
+        seen.add(it.get("id"))
+        out.append(it)
+    return out[:30]
 
 
-@app.get("/admin/logs", response_class=HTMLResponse)
-def admin_logs(request: Request):
+def releases_rewrite(items):
+    kv.delete("lib:%s:releases" % GAME_ID)
+    for it in reversed(items):
+        kv.lpush("lib:%s:releases" % GAME_ID, json.dumps(it, ensure_ascii=False).encode())
+
+
+@app.get("/admin/releases", response_class=HTMLResponse)
+def admin_releases(request: Request):
     if not check_session(request):
         return RedirectResponse("/admin/login", status_code=303)
-    return templates.TemplateResponse("logs.html", {
-        "request": request, "app": APP_NAME, "logs": recent_logs(400), "fmt": fmt_ts, "mask": mask,
+    return templates.TemplateResponse("releases.html", {
+        "request": request, "app": APP_NAME, "user_name": auth_user(), "page_name": "releases",
+        "lib": lib_meta(GAME_ID), "releases": releases_list(), "fmt": fmt_ts,
+        "stats": stats(), "ok": request.query_params.get("ok", ""),
+        "err": request.query_params.get("err", ""),
+    })
+
+
+@app.post("/admin/releases/upload")
+async def admin_releases_upload(file: UploadFile = File(...), version: str = Form(""),
+                                notes: str = Form(""), mandatory: str = Form("")):
+    blob = await file.read()
+    if not blob:
+        return RedirectResponse("/admin/releases?err=empty", status_code=303)
+    if len(blob) > 64 * 1024 * 1024:
+        return RedirectResponse("/admin/releases?err=size", status_code=303)
+    if blob[:4] != b"\x7fELF":
+        return RedirectResponse("/admin/releases?err=notelf", status_code=303)
+    md5 = hashlib.md5(blob).hexdigest()
+    sha256 = hashlib.sha256(blob).hexdigest()
+    ver = version.strip() or datetime.now(TZ).strftime("%Y%m%d-%H%M")
+    rid = "%d-%s" % (now_ts(), secrets.token_hex(3))
+    meta = {"id": rid, "version": ver, "md5": md5, "sha256": sha256, "size": len(blob),
+            "uploaded": now_ts(), "filename": file.filename or "libMyLibName.so",
+            "notes": notes.strip()[:600], "mandatory": bool(mandatory)}
+    kv.set("lib:%s:blob:%s" % (GAME_ID, rid), blob)
+    kv.set("lib:%s:meta" % GAME_ID, json.dumps(meta, ensure_ascii=False).encode())
+    kv.lpush("lib:%s:releases" % GAME_ID, json.dumps(meta, ensure_ascii=False).encode())
+    keep = releases_list()[3:]
+    for old in keep:
+        kv.delete("lib:%s:blob:%s" % (GAME_ID, old.get("id", "")))
+    return RedirectResponse("/admin/releases?ok=1", status_code=303)
+
+
+@app.post("/admin/releases/activate")
+def admin_releases_activate(rid: str = Form(...)):
+    for it in releases_list():
+        if it.get("id") == rid:
+            if kv.get("lib:%s:blob:%s" % (GAME_ID, rid)) is None:
+                return RedirectResponse("/admin/releases?err=gone", status_code=303)
+            kv.set("lib:%s:meta" % GAME_ID, json.dumps(it, ensure_ascii=False).encode())
+            break
+    return RedirectResponse("/admin/releases?ok=2", status_code=303)
+
+
+@app.post("/admin/releases/delete")
+def admin_releases_delete(rid: str = Form(...)):
+    meta = lib_meta(GAME_ID) or {}
+    if meta.get("id") == rid:
+        return RedirectResponse("/admin/releases?err=active", status_code=303)
+    kv.delete("lib:%s:blob:%s" % (GAME_ID, rid))
+    releases_rewrite([r for r in releases_list() if r.get("id") != rid])
+    return RedirectResponse("/admin/releases?ok=3", status_code=303)
+
+
+@app.get("/admin/free-stock", response_class=HTMLResponse)
+def admin_free_stock(request: Request):
+    if not check_session(request):
+        return RedirectResponse("/admin/login", status_code=303)
+    t = now_ts()
+    pool = [k for k in all_keys() if k.get("free") and not k.get("used") and not k.get("banned")
+            and (not k.get("expires") or k["expires"] > t)]
+    pool.sort(key=lambda k: k.get("created") or 0)
+    claimed = [k for k in all_keys() if k.get("free") and k.get("used")]
+    claimed.sort(key=lambda k: k.get("used") or 0, reverse=True)
+    return templates.TemplateResponse("free_stock.html", {
+        "request": request, "app": APP_NAME, "user_name": auth_user(), "page_name": "free",
+        "pool": pool, "claimed": claimed[:30], "fmt": fmt_ts, "mask": mask, "stats": stats(),
+        "enabled": kv.get("cfg:free") == b"1", "ok": request.query_params.get("ok", ""),
+    })
+
+
+@app.post("/admin/free-stock/add")
+def admin_free_stock_add(count: int = Form(10), days: int = Form(3)):
+    count = max(1, min(100, int(count)))
+    days = max(1, min(365, int(days)))
+    created = now_ts()
+    expires = created + days * 86400
+    for _ in range(count):
+        k = gen_key()
+        while get_key(k):
+            k = gen_key()
+        put_key({"k": k, "game": GAME_ID, "created": created, "days": days, "expires": expires,
+                 "note": "free", "serials": [], "device_limit": 1, "banned": False, "free": True,
+                 "used": None, "last_seen": None, "last_ip": "", "activations": 0})
+    return RedirectResponse("/admin/free-stock?ok=1", status_code=303)
+
+
+@app.post("/admin/free-stock/remove")
+def admin_free_stock_remove(key: str = Form(...)):
+    rec = get_key(key.strip().upper())
+    if rec and rec.get("free") and not rec.get("used"):
+        kv.delete("key:" + rec["k"])
+    return RedirectResponse("/admin/free-stock", status_code=303)
+
+
+@app.get("/admin/lib")
+def admin_lib_redirect():
+    return RedirectResponse("/admin/releases", status_code=307)
+
+
+@app.get("/admin/login", response_class=HTMLResponse)
+def admin_login_page(request: Request):
+    if check_session(request):
+        return RedirectResponse("/admin", status_code=303)
+    return templates.TemplateResponse("login.html", {"request": request, "app": APP_NAME})
+
+
+@app.post("/admin/login")
+def admin_login(request: Request, username: str = Form(""), password: str = Form("")):
+    ip = client_ip(request)
+    if not rl.hit("a:" + ip, 8, 600):
+        return templates.TemplateResponse("login.html", {"request": request, "app": APP_NAME, "user_name": auth_user(),
+                                                         "error": "Sai quá nhiều lần, thử lại sau 10 phút"}, status_code=429)
+    if not auth_ok(username, password):
+        return templates.TemplateResponse("login.html", {"request": request, "app": APP_NAME, "user_name": auth_user(),
+                                                         "error": "Tài khoản hoặc mật khẩu không đúng",
+                                                         "username": username}, status_code=401)
+    resp = RedirectResponse("/admin", status_code=303)
+    resp.set_cookie("evz_admin", make_session(), max_age=SESSION_HOURS * 3600,
+                    httponly=True, samesite="strict", secure=COOKIE_SECURE)
+    return resp
+
+
+@app.post("/admin/logout")
+def admin_logout():
+    resp = RedirectResponse("/admin/login", status_code=303)
+    resp.delete_cookie("evz_admin")
+    return resp
+
+
+@app.get("/admin", response_class=HTMLResponse)
+def admin_home(request: Request):
+    if not check_session(request):
+        return RedirectResponse("/admin/login", status_code=303)
+    t = now_ts()
+    keys = all_keys()
+    soon = [k for k in keys if k.get("expires") and t < k["expires"] <= t + 3 * 86400 and not k.get("banned")]
+    soon.sort(key=lambda k: k["expires"])
+    devs = all_devices()
+    return templates.TemplateResponse("dashboard.html", {
+        "request": request, "app": APP_NAME, "user_name": auth_user(), "page_name": "home", "stats": stats(),
+        "lib": lib_meta(GAME_ID), "logs": recent_logs(8), "fmt": fmt_ts, "mask": mask,
+        "soon": soon[:5], "online": [d for d in devs if d["online"]][:5], "now": t,
+        "status_of": key_status, "labels": STATUS_LABEL,
     })
 
 
@@ -617,9 +867,9 @@ def admin_settings(request: Request):
     if not check_session(request):
         return RedirectResponse("/admin/login", status_code=303)
     return templates.TemplateResponse("settings.html", {
-        "request": request, "app": APP_NAME, "user": auth_user(),
+        "request": request, "app": APP_NAME, "user_name": auth_user(), "user": auth_user(),
         "free_on": kv.get("cfg:free") == b"1", "ok": request.query_params.get("ok", ""),
-        "err": request.query_params.get("err", ""),
+        "err": request.query_params.get("err", ""), "game": GAME_ID, "stats": stats(),
     })
 
 
@@ -650,7 +900,7 @@ def admin_settings_free(enabled: str = Form("")):
 def landing(request: Request):
     meta = lib_meta(GAME_ID)
     return templates.TemplateResponse("landing.html", {
-        "request": request, "app": APP_NAME, "lib": meta, "fmt": fmt_ts,
+        "request": request, "app": APP_NAME, "user_name": auth_user(), "lib": meta, "fmt": fmt_ts,
     })
 
 
