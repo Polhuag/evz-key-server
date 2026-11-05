@@ -5,7 +5,7 @@
 <div class="page-head">
   <div>
     <h1 class="page-title">Cài đặt</h1>
-    <p class="page-desc">Tài khoản quản trị, phát key free và sao lưu dữ liệu</p>
+    <p class="page-desc">Quản lý tài khoản quản trị, tính năng phát key free và sao lưu dữ liệu.</p>
   </div>
 </div>
 
@@ -14,10 +14,15 @@
 {% if err == 'match' %}<div class="alert bad">Hai mật khẩu không khớp nhau.</div>{% endif %}
 {% if err == 'backup' %}<div class="alert bad">File sao lưu không hợp lệ.</div>{% endif %}
 
-<div class="settings-grid">
-  <div>
-    <div class="card" style="margin-bottom:16px">
-      <div class="card-head"><h2 class="card-title">Tài khoản quản trị</h2></div>
+<div class="split">
+  <div class="stack">
+    <div class="card">
+      <div class="card-head">
+        <div>
+          <h2 class="card-title">Tài khoản quản trị</h2>
+          <div class="card-sub">Thông tin đăng nhập vào bảng điều khiển</div>
+        </div>
+      </div>
       <div class="card-body">
         <form method="post" action="/admin/settings/password">
           <div class="field">
@@ -35,19 +40,22 @@
               <input id="password2" name="password2" type="password" minlength="6" required autocomplete="new-password">
             </div>
           </div>
-          <div class="alert warn" style="margin-bottom:12px">Đổi thông tin đăng nhập sẽ đăng xuất mọi phiên hiện tại.</div>
+          <div class="alert warn" style="margin:4px 0 14px">Đổi thông tin đăng nhập sẽ đăng xuất mọi phiên hiện tại.</div>
           <button class="btn primary" type="submit">Lưu thay đổi</button>
         </form>
       </div>
     </div>
 
-    <div class="card" style="margin-bottom:16px">
+    <div class="card">
       <div class="card-head">
-        <h2 class="card-title">Phát key free</h2>
-        <span class="badge {{ 'ok' if free_on else 'mut' }}" style="margin-left:auto">{{ 'Đang bật' if free_on else 'Đang tắt' }}</span>
+        <div>
+          <h2 class="card-title">Phát key free</h2>
+          <div class="card-sub">Cho phép thiết bị nhận key dùng thử</div>
+        </div>
+        <span class="badge {{ 'ok' if free_on else 'mut' }} spacer">{{ 'Đang bật' if free_on else 'Đang tắt' }}</span>
       </div>
       <div class="card-body">
-        <p class="page-desc" style="margin:0 0 12px">Khi bật, thiết bị gọi API <span class="mono">/api/free</span> sẽ nhận 1 key trong kho free. Mỗi thiết bị nhận tối đa 1 key mỗi 7 ngày.</p>
+        <p class="page-desc" style="margin:0 0 14px">Khi bật, thiết bị yêu cầu sẽ nhận 1 key trong kho free. Mỗi thiết bị nhận tối đa 1 key mỗi 7 ngày.</p>
         <form method="post" action="/admin/settings/free">
           <input type="hidden" name="enabled" value="{{ '' if free_on else '1' }}">
           <button class="btn {{ 'danger' if free_on else 'primary' }}" type="submit">{{ 'Tắt phát key free' if free_on else 'Bật phát key free' }}</button>
@@ -56,12 +64,17 @@
     </div>
 
     <div class="card">
-      <div class="card-head"><h2 class="card-title">Sao lưu</h2></div>
+      <div class="card-head">
+        <div>
+          <h2 class="card-title">Sao lưu &amp; khôi phục</h2>
+          <div class="card-sub">Bảo toàn dữ liệu key và bản phát hành</div>
+        </div>
+      </div>
       <div class="card-body">
         <div class="field">
           <label>Tải dữ liệu</label>
-          <a class="btn" href="/admin/backup">Tải file JSON</a>
-          <div class="hint">Gồm toàn bộ key và thông tin bản mod đang phát hành</div>
+          <a class="btn" href="/admin/backup">Tải file sao lưu</a>
+          <div class="hint">Bao gồm toàn bộ key và thông tin bản mod đang phát hành</div>
         </div>
         <form method="post" action="/admin/restore" enctype="multipart/form-data">
           <div class="field">
@@ -69,31 +82,61 @@
             <input id="backup" name="file" type="file" accept=".json,application/json" required>
             <div class="hint">Key trùng sẽ được ghi đè, không xoá key hiện có</div>
           </div>
-          <button class="btn" type="submit">Khôi phục</button>
+          <button class="btn" type="submit">Khôi phục dữ liệu</button>
         </form>
       </div>
     </div>
   </div>
 
-  <div>
+  <div class="stack">
     <div class="card">
-      <div class="card-head"><h2 class="card-title">Hệ thống</h2></div>
+      <div class="card-head">
+        <div>
+          <h2 class="card-title">Thông tin dịch vụ</h2>
+          <div class="card-sub">Tình trạng hệ thống hiện tại</div>
+        </div>
+      </div>
       <div class="card-body">
         <div class="kv">
           <div class="k">Tên dịch vụ</div><div class="v">{{ app }}</div>
-          <div class="k">Trò chơi</div><div class="v mono">{{ game }}</div>
-          <div class="k">Xác thực</div><div class="v">RSA-2048 PKCS#1 v1.5 · SHA-256</div>
-          <div class="k">Phiên admin</div><div class="v">Cookie HttpOnly · SameSite Strict</div>
-          <div class="k">Chống dò key</div><div class="v">Giới hạn theo IP và theo key</div>
+          <div class="k">Trạng thái</div><div class="v"><span class="badge ok">Hoạt động</span></div>
+          <div class="k">Key đang chạy</div><div class="v num">{{ stats.active }}</div>
+          <div class="k">Thiết bị online</div><div class="v num">{{ stats.online }}</div>
         </div>
-        <div class="alert info" style="margin:14px 0 0">Khoá ký nằm trên server. Client chỉ giữ khoá công khai nên không thể giả lập phản hồi hợp lệ.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div>
+          <h2 class="card-title">Bảo mật</h2>
+          <div class="card-sub">Lớp bảo vệ tài khoản quản trị</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="stack" style="gap:14px">
+          <div style="display:flex;gap:12px">
+            <div class="stat-icon" style="flex:0 0 34px;width:34px;height:34px">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 5 3.4 8.4 8 9 4.6-.6 8-4 8-9V6l-8-3Z"/><path d="m9 12 2 2 4-4"/></svg>
+            </div>
+            <div>
+              <div style="font-weight:600;font-size:13px">Phiên đăng nhập an toàn</div>
+              <div class="small muted" style="margin-top:2px">Tự động hết hạn sau 12 giờ. Đổi mật khẩu sẽ đăng xuất mọi thiết bị.</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:12px">
+            <div class="stat-icon" style="flex:0 0 34px;width:34px;height:34px">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>
+            </div>
+            <div>
+              <div style="font-weight:600;font-size:13px">Chống dò key</div>
+              <div class="small muted" style="margin-top:2px">Tự động giới hạn số lần thử theo thiết bị và địa chỉ truy cập.</div>
+            </div>
+          </div>
+          <div class="alert info" style="margin:0">Dữ liệu key được bảo vệ trên máy chủ. Người chơi không thể tự tạo phản hồi xác thực hợp lệ.</div>
+        </div>
       </div>
     </div>
   </div>
 </div>
-
-<style>
-.settings-grid{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:16px;align-items:start}
-@media(max-width:900px){.settings-grid{grid-template-columns:1fr}}
-</style>
 {% endblock %}

@@ -5,65 +5,93 @@
 <div class="page-head">
   <div>
     <h1 class="page-title">Bản mod</h1>
-    <p class="page-desc">Thay libMyLibName.so — client tự tải bản mới khi đăng nhập, không cần phát hành APK</p>
+    <p class="page-desc">Phát hành bản cập nhật cho người chơi. Client tự động tải bản mới khi đăng nhập, không cần cài lại APK.</p>
   </div>
 </div>
 
-{% if ok == '1' %}<div class="alert ok">Đã phát hành bản mới. Client sẽ nhận thông báo ở lần đăng nhập kế tiếp.</div>{% endif %}
+{% if ok == '1' %}<div class="alert ok">Đã phát hành bản mới. Người chơi sẽ nhận thông báo ở lần đăng nhập kế tiếp.</div>{% endif %}
 {% if ok == '2' %}<div class="alert ok">Đã kích hoạt lại bản đã chọn.</div>{% endif %}
 {% if ok == '3' %}<div class="alert ok">Đã xoá bản mod khỏi lịch sử.</div>{% endif %}
-{% if err == 'notelf' %}<div class="alert bad">File không phải thư viện ELF (.so) hợp lệ.</div>{% endif %}
-{% if err == 'size' %}<div class="alert bad">File vượt quá 64MB.</div>{% endif %}
-{% if err == 'empty' %}<div class="alert bad">Chưa chọn file.</div>{% endif %}
+{% if err == 'notelf' %}<div class="alert bad">File không phải thư viện hợp lệ. Vui lòng chọn đúng file libMyLibName.so.</div>{% endif %}
+{% if err == 'size' %}<div class="alert bad">File vượt quá dung lượng cho phép (64MB).</div>{% endif %}
+{% if err == 'empty' %}<div class="alert bad">Chưa chọn file để phát hành.</div>{% endif %}
 {% if err == 'active' %}<div class="alert bad">Không thể xoá bản đang phát hành. Hãy kích hoạt bản khác trước.</div>{% endif %}
-{% if err == 'gone' %}<div class="alert bad">File của bản này không còn trên server.</div>{% endif %}
+{% if err == 'gone' %}<div class="alert bad">File của bản này không còn trên máy chủ.</div>{% endif %}
 
-<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px" class="rel-grid">
+<div class="split">
   <div class="card">
-    <div class="card-head"><h2 class="card-title">Đang phát hành</h2>
-      {% if lib %}<span class="badge {{ 'warn' if lib.mandatory else 'mut' }}" style="margin-left:auto">{{ 'Bắt buộc cập nhật' if lib.mandatory else 'Tuỳ chọn' }}</span>{% endif %}
+    <div class="card-head">
+      <div>
+        <h2 class="card-title">Bản đang phát hành</h2>
+        <div class="card-sub">Phiên bản người chơi nhận được khi đăng nhập</div>
+      </div>
+      {% if lib %}<span class="badge {{ 'warn' if lib.mandatory else 'mut' }} spacer">{{ 'Bắt buộc cập nhật' if lib.mandatory else 'Tuỳ chọn' }}</span>{% endif %}
     </div>
     <div class="card-body">
       {% if lib %}
-        <div class="kv">
-          <div class="k">Phiên bản</div><div class="v"><b>{{ lib.version }}</b></div>
-          <div class="k">Tên file</div><div class="v mono">{{ lib.filename }}</div>
-          <div class="k">Kích thước</div><div class="v num">{{ (lib.size/1048576)|round(2) }} MB</div>
-          <div class="k">MD5</div><div class="v mono">{{ lib.md5 }}</div>
-          <div class="k">SHA-256</div><div class="v mono">{{ lib.sha256 or '—' }}</div>
-          <div class="k">Phát hành</div><div class="v">{{ fmt(lib.uploaded) }}</div>
+        <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px">
+          <div class="dev-avatar" style="width:54px;height:54px;flex:0 0 54px;border-radius:15px">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8.5 12 3 3 8.5v7L12 21l9-5.5v-7Z"/><path d="M3 8.5 12 14l9-5.5M12 14v7"/></svg>
+          </div>
+          <div>
+            <div style="font-size:20px;font-weight:750;letter-spacing:-.02em">{{ lib.version }}</div>
+            <div class="small muted">Phát hành {{ fmt(lib.uploaded) }}</div>
+          </div>
         </div>
-        {% if lib.notes %}<div class="alert info" style="margin:14px 0 0;white-space:pre-wrap">{{ lib.notes }}</div>{% endif %}
+        <div class="kv">
+          <div class="k">Kích thước</div><div class="v num">{{ (lib.size/1048576)|round(2) }} MB</div>
+          <div class="k">Tên file</div><div class="v mono">{{ lib.filename }}</div>
+          <div class="k">Trạng thái</div><div class="v">{% if lib.mandatory %}Bắt buộc cập nhật{% else %}Cập nhật tuỳ chọn{% endif %}</div>
+        </div>
+        {% if lib.notes %}<div class="alert info" style="margin:18px 0 0;white-space:pre-wrap">{{ lib.notes }}</div>{% endif %}
+        <details class="tech" style="margin-top:16px">
+          <summary>Thông tin kỹ thuật</summary>
+          <div class="tech-body">
+            <div class="kv">
+              <div class="k">Mã định danh</div><div class="v mono">{{ lib.id }}</div>
+              <div class="k">MD5</div><div class="v mono">{{ lib.md5 }}</div>
+              <div class="k">SHA-256</div><div class="v mono">{{ lib.sha256 or '—' }}</div>
+            </div>
+          </div>
+        </details>
       {% else %}
-        <div class="empty"><p>Chưa có bản mod nào được phát hành.</p></div>
+        <div class="empty">
+          <div class="empty-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 16V4M7 9l5-5 5 5M5 20h14"/></svg></div>
+          <p>Chưa có bản mod nào được phát hành.</p>
+        </div>
       {% endif %}
     </div>
   </div>
 
   <div class="card">
-    <div class="card-head"><h2 class="card-title">Phát hành bản mới</h2></div>
+    <div class="card-head">
+      <div>
+        <h2 class="card-title">Phát hành bản mới</h2>
+        <div class="card-sub">Tải lên file libMyLibName.so</div>
+      </div>
+    </div>
     <div class="card-body">
       <form method="post" action="/admin/releases/upload" enctype="multipart/form-data" id="upForm">
         <div class="dropzone" id="drop">
-          <div class="t">Kéo thả libMyLibName.so vào đây</div>
-          <div class="s">hoặc bấm để chọn file · tối đa 64MB</div>
-          <input type="file" name="file" id="file" accept=".so" style="display:none" required>
+          <div class="dz-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 16V4M7 9l5-5 5 5M5 20h14"/></svg></div>
+          <div class="t">Kéo thả file vào đây</div>
+          <div class="s">hoặc bấm để chọn · tối đa 64MB</div>
+          <input type="file" name="file" id="file" accept=".so" style="display:none">
         </div>
         <div class="fileinfo" id="finfo">
           <div class="kv">
             <div class="k">File</div><div class="v mono" id="fname">—</div>
             <div class="k">Kích thước</div><div class="v num" id="fsize">—</div>
-            <div class="k">SHA-256</div><div class="v mono" id="fsha">đang tính…</div>
           </div>
         </div>
-        <div class="field" style="margin-top:14px">
+        <div class="field" style="margin-top:16px">
           <label for="version">Phiên bản</label>
-          <input id="version" name="version" type="text" placeholder="VD: 1.64.1.7-v74">
+          <input id="version" name="version" type="text" placeholder="VD: 1.64.1.7-v78">
           <div class="hint">Để trống sẽ dùng ngày giờ hiện tại</div>
         </div>
         <div class="field">
           <label for="notes">Nội dung cập nhật</label>
-          <textarea id="notes" name="notes" placeholder="VD: Thêm Auto Trừng Trị, sửa né tường, tối ưu FPS…"></textarea>
+          <textarea id="notes" name="notes" placeholder="VD: Thêm tính năng mới, sửa lỗi, tối ưu hiệu năng…"></textarea>
         </div>
         <div class="check-row">
           <input id="mandatory" name="mandatory" type="checkbox" value="1" checked>
@@ -72,24 +100,32 @@
             <div class="hint">Người chơi phải tải bản mới mới vào được menu</div>
           </div>
         </div>
-        <button class="btn primary" type="submit" style="width:100%">Phát hành</button>
+        <button class="btn primary block" type="submit">Phát hành bản mới</button>
       </form>
     </div>
   </div>
 </div>
 
-<div class="card" style="margin-top:16px">
-  <div class="card-head"><h2 class="card-title">Lịch sử phát hành</h2></div>
+<div class="card mt">
+  <div class="card-head">
+    <div>
+      <h2 class="card-title">Lịch sử phát hành</h2>
+      <div class="card-sub">Các bản đã tải lên máy chủ</div>
+    </div>
+  </div>
   {% if releases %}
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Phiên bản</th><th>Kích thước</th><th>Phát hành</th><th>Trạng thái</th><th style="width:160px"></th></tr></thead>
+      <thead><tr><th>Phiên bản</th><th>Kích thước</th><th>Phát hành</th><th>Trạng thái</th><th style="width:170px"></th></tr></thead>
       <tbody>
       {% for r in releases %}
         <tr data-rid="{{ r.id }}">
-          <td data-label="Phiên bản"><b>{{ r.version }}</b>{% if r.notes %}<div class="small muted" style="max-width:420px">{{ r.notes }}</div>{% endif %}</td>
+          <td data-label="Phiên bản">
+            <b>{{ r.version }}</b>
+            {% if r.notes %}<div class="small muted" style="max-width:420px">{{ r.notes }}</div>{% endif %}
+          </td>
           <td data-label="Kích thước" class="num small">{{ (r.size/1048576)|round(2) }} MB</td>
-          <td data-label="Phát hành" class="small">{{ fmt(r.uploaded) }}</td>
+          <td data-label="Phát hành" class="small muted">{{ fmt(r.uploaded) }}</td>
           <td data-label="Trạng thái">{% if lib and lib.id == r.id %}<span class="badge ok">Đang phát hành</span>{% else %}<span class="badge mut">Lưu trữ</span>{% endif %}</td>
           <td class="actions">
             {% if not (lib and lib.id == r.id) %}
@@ -109,7 +145,7 @@
     </table>
   </div>
   {% else %}
-  <div class="empty"><p>Chưa có bản nào.</p></div>
+  <div class="empty"><p>Chưa có bản nào trong lịch sử.</p></div>
   {% endif %}
 </div>
 
@@ -118,20 +154,13 @@
   var drop=document.getElementById('drop'), file=document.getElementById('file');
   var finfo=document.getElementById('finfo');
   function human(n){return (n/1048576).toFixed(2)+' MB'}
-  function sha(buf){
-    return crypto.subtle.digest('SHA-256',buf).then(function(h){
-      return Array.from(new Uint8Array(h)).map(function(b){return b.toString(16).padStart(2,'0')}).join('');
-    });
-  }
   function pick(f){
     if(!f)return;
     finfo.classList.add('show');
     document.getElementById('fname').textContent=f.name;
     document.getElementById('fsize').textContent=human(f.size);
-    document.getElementById('fsha').textContent='đang tính…';
-    f.arrayBuffer().then(sha).then(function(h){document.getElementById('fsha').textContent=h});
     if(!document.getElementById('version').value){
-      document.getElementById('version').value=f.name.replace(/^lib|\\.so$/g,'')+' '+new Date().toISOString().slice(0,10);
+      document.getElementById('version').value=f.name.replace(/^lib|\.so$/g,'')+' '+new Date().toISOString().slice(0,10);
     }
   }
   drop.addEventListener('click',function(){file.click()});
@@ -147,6 +176,4 @@
   });
 })();
 </script>
-<style>@media(max-width:900px){.rel-grid{grid-template-columns:1fr!important}}</style>
-<a class="fab" href="#upForm">Phát hành bản mới</a>
 {% endblock %}

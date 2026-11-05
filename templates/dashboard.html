@@ -2,27 +2,68 @@
 {% block title %}Tổng quan · {{ app }}{% endblock %}
 {% block crumb %}Tổng quan{% endblock %}
 {% block content %}
-<div class="page-head">
-  <div>
-    <h1 class="page-title">Tổng quan</h1>
-    <p class="page-desc">Tình trạng key, thiết bị và bản mod đang phát hành</p>
+<section class="hero">
+  <div class="hero-eyebrow"><span class="dot"></span> {{ app }} · Trung tâm quản trị</div>
+  <h1 class="hero-title">Quản lý key và bản mod<br>trong một nơi duy nhất.</h1>
+  <p class="hero-text">Theo dõi thiết bị, phát hành bản cập nhật và kiểm soát quyền truy cập chỉ với vài thao tác.</p>
+  <div class="hero-actions">
+    <a class="btn primary" href="/admin/keys/new">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      Tạo key mới
+    </a>
+    <a class="btn" href="/admin/releases">Phát hành bản mod</a>
   </div>
-  <div class="page-actions">
-    <a class="btn" href="/admin/keys/new">Tạo key</a>
-    <a class="btn primary" href="/admin/releases">Phát hành bản mod</a>
+  <div class="hero-meta">
+    <div><div class="k">Bản mod hiện tại</div><div class="v">{{ lib.version if lib else '—' }}</div></div>
+    <div><div class="k">Key hoạt động</div><div class="v num">{{ stats.active }}</div></div>
+    <div><div class="k">Thiết bị online</div><div class="v num">{{ stats.online }}</div></div>
+  </div>
+</section>
+
+<div class="stat-grid mt">
+  <div class="stat">
+    <div class="stat-top">
+      <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="M10.8 12.2 20 3M16 7l3 3M14 9l3 3"/></svg></div>
+      <div class="k">Tổng key</div>
+    </div>
+    <div class="v num">{{ stats.total }}</div>
+    <div class="s">{{ stats.used }} key đã kích hoạt</div>
+  </div>
+  <div class="stat tone-ok">
+    <div class="stat-top">
+      <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+      <div class="k">Đang hoạt động</div>
+    </div>
+    <div class="v num">{{ stats.active }}</div>
+    <div class="s">{{ stats.expired }} hết hạn · {{ stats.banned }} bị khoá</div>
+  </div>
+  <div class="stat tone-violet">
+    <div class="stat-top">
+      <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M11 18.5h2"/></svg></div>
+      <div class="k">Thiết bị</div>
+    </div>
+    <div class="v num">{{ stats.devices }}</div>
+    <div class="s">{{ stats.online }} online trong 15 phút</div>
+  </div>
+  <div class="stat tone-warn">
+    <div class="stat-top">
+      <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10h16v10H4z"/><path d="M2 6h20v4H2zM12 6v14"/></svg></div>
+      <div class="k">Kho key free</div>
+    </div>
+    <div class="v num">{{ stats.free_pool }}</div>
+    <div class="s">key sẵn sàng phát</div>
   </div>
 </div>
 
-<div class="statrow" style="margin-bottom:16px">
-  <div class="stat"><div class="k">Tổng key</div><div class="v">{{ stats.total }}</div><div class="s">{{ stats.used }} đã dùng</div></div>
-  <div class="stat"><div class="k">Đang hoạt động</div><div class="v">{{ stats.active }}</div><div class="s">{{ stats.expired }} hết hạn · {{ stats.banned }} bị khoá</div></div>
-  <div class="stat"><div class="k">Thiết bị</div><div class="v">{{ stats.devices }}</div><div class="s">{{ stats.online }} online 15 phút</div></div>
-  <div class="stat"><div class="k">Key free</div><div class="v">{{ stats.free_pool }}</div><div class="s">trong kho phát</div></div>
-</div>
-
-<div style="display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:16px" class="dash-grid">
+<div class="split mt">
   <div class="card">
-    <div class="card-head"><h2 class="card-title">Cần chú ý</h2></div>
+    <div class="card-head">
+      <div>
+        <h2 class="card-title">Cần chú ý</h2>
+        <div class="card-sub">Key sắp hết hạn trong 3 ngày tới</div>
+      </div>
+      <a class="btn sm ghost spacer" href="/admin/keys?status=expired">Xem tất cả</a>
+    </div>
     <div class="card-body tight">
       {% if soon %}
       <div class="table-wrap">
@@ -31,8 +72,8 @@
           <tbody>
           {% for k in soon %}
             <tr>
-              <td data-label="Key" class="mono copy" data-copy="{{ k.k }}">{{ k.k }}</td>
-              <td data-label="Hết hạn" class="small">{{ fmt(k.expires) }}</td>
+              <td data-label="Key"><span class="mono copy" data-copy="{{ k.k }}">{{ k.k }}</span></td>
+              <td data-label="Hết hạn"><span class="badge warn">{{ fmt(k.expires) }}</span></td>
               <td data-label="Ghi chú" class="small muted">{{ k.note or '—' }}</td>
             </tr>
           {% endfor %}
@@ -40,50 +81,111 @@
         </table>
       </div>
       {% else %}
-      <div class="empty"><p>Không có key nào hết hạn trong 3 ngày tới.</p></div>
+      <div class="empty">
+        <div class="empty-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+        <p>Không có key nào sắp hết hạn.</p>
+      </div>
       {% endif %}
     </div>
   </div>
 
   <div class="card">
-    <div class="card-head"><h2 class="card-title">Bản mod</h2>
-      {% if lib %}<a class="btn sm" style="margin-left:auto" href="/admin/releases">Quản lý</a>{% endif %}
+    <div class="card-head">
+      <div>
+        <h2 class="card-title">Bản mod hiện tại</h2>
+        <div class="card-sub">Bản đang phát hành cho người chơi</div>
+      </div>
+      {% if lib %}<span class="badge {{ 'warn' if lib.mandatory else 'mut' }} spacer">{{ 'Bắt buộc' if lib.mandatory else 'Tuỳ chọn' }}</span>{% endif %}
     </div>
     <div class="card-body">
       {% if lib %}
-        <div class="kv">
-          <div class="k">Phiên bản</div><div class="v"><b>{{ lib.version }}</b> {% if lib.mandatory %}<span class="badge warn">Bắt buộc</span>{% endif %}</div>
-          <div class="k">Kích thước</div><div class="v num">{{ (lib.size/1048576)|round(2) }} MB</div>
-          <div class="k">Phát hành</div><div class="v">{{ fmt(lib.uploaded) }}</div>
+        <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px">
+          <div class="dev-avatar" style="width:48px;height:48px;flex:0 0 48px;border-radius:14px">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8.5 12 3 3 8.5v7L12 21l9-5.5v-7Z"/><path d="M3 8.5 12 14l9-5.5M12 14v7"/></svg>
+          </div>
+          <div>
+            <div style="font-size:17px;font-weight:700">{{ lib.version }}</div>
+            <div class="small muted">Phát hành {{ fmt(lib.uploaded) }}</div>
+          </div>
         </div>
-        {% if lib.notes %}<div class="small muted" style="margin-top:10px;white-space:pre-wrap">{{ lib.notes }}</div>{% endif %}
+        <div class="kv">
+          <div class="k">Kích thước</div><div class="v num">{{ (lib.size/1048576)|round(2) }} MB</div>
+          <div class="k">Trạng thái</div><div class="v">{% if lib.mandatory %}Bắt buộc cập nhật{% else %}Cập nhật tuỳ chọn{% endif %}</div>
+        </div>
+        {% if lib.notes %}<div class="alert info" style="margin:16px 0 0;white-space:pre-wrap">{{ lib.notes }}</div>{% endif %}
+        <a class="btn block mt" href="/admin/releases">Quản lý bản phát hành</a>
       {% else %}
-        <div class="empty"><p>Chưa phát hành bản mod nào.</p><a class="btn" href="/admin/releases">Tải lên .so</a></div>
+        <div class="empty">
+          <div class="empty-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 16V4M7 9l5-5 5 5M5 20h14"/></svg></div>
+          <p>Chưa phát hành bản mod nào.</p>
+          <a class="btn" href="/admin/releases">Tải lên bản đầu tiên</a>
+        </div>
       {% endif %}
     </div>
   </div>
 </div>
 
-<div class="card" style="margin-top:16px">
-  <div class="card-head"><h2 class="card-title">Đăng nhập gần đây</h2></div>
-  {% if logs %}
-  <div class="table-wrap">
-    <table>
-      <thead><tr><th>Thời gian</th><th>Key</th><th>Thiết bị</th><th>IP</th><th>Kết quả</th></tr></thead>
-      <tbody>
-      {% for l in logs %}
-        <tr>
-          <td data-label="Thời gian" class="small">{{ fmt(l.t) }}</td>
-          <td data-label="Key" class="mono">{{ l.key }}</td>
-          <td data-label="Thiết bị" class="mono">{{ l.serial }}</td>
-          <td data-label="IP" class="small muted">{{ l.ip }}</td>
-          <td data-label="Kết quả">{% if l.ok %}<span class="badge ok">OK</span>{% else %}<span class="badge bad">{{ l.r }}</span>{% endif %}</td>
-        </tr>
-      {% endfor %}
-      </tbody>
-    </table>
+<div class="split mt">
+  <div class="card">
+    <div class="card-head">
+      <div>
+        <h2 class="card-title">Thiết bị đang hoạt động</h2>
+        <div class="card-sub">Kết nối trong 15 phút gần nhất</div>
+      </div>
+      <a class="btn sm ghost spacer" href="/admin/devices?state=online">Xem tất cả</a>
+    </div>
+    <div class="card-body tight">
+      {% if online %}
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Thiết bị</th><th>Key</th><th>Lần cuối</th></tr></thead>
+          <tbody>
+          {% for d in online %}
+            <tr>
+              <td data-label="Thiết bị">
+                <div style="font-weight:600">{{ d.info.brand or 'Thiết bị' }} {{ d.info.model or '' }}</div>
+                <div class="small muted mono">{{ mask(d.serial, 4) }}</div>
+              </td>
+              <td data-label="Key" class="mono small">{{ d['keys'][0].k if d['keys'] else '—' }}</td>
+              <td data-label="Lần cuối" class="small muted">{{ fmt(d.last_seen) }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty"><p>Chưa có thiết bị nào online.</p></div>
+      {% endif %}
+    </div>
   </div>
-  {% else %}<div class="empty"><p>Chưa có lượt đăng nhập nào.</p></div>{% endif %}
+
+  <div class="card">
+    <div class="card-head">
+      <div>
+        <h2 class="card-title">Đăng nhập gần đây</h2>
+        <div class="card-sub">Hoạt động xác thực mới nhất</div>
+      </div>
+    </div>
+    <div class="card-body tight">
+      {% if logs %}
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Thời gian</th><th>Key</th><th>Kết quả</th></tr></thead>
+          <tbody>
+          {% for l in logs %}
+            <tr>
+              <td data-label="Thời gian" class="small muted">{{ fmt(l.t) }}</td>
+              <td data-label="Key" class="mono small">{{ l.key }}</td>
+              <td data-label="Kết quả">{% if l.ok %}<span class="badge ok">Thành công</span>{% else %}<span class="badge bad">Từ chối</span>{% endif %}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty"><p>Chưa có lượt đăng nhập nào.</p></div>
+      {% endif %}
+    </div>
+  </div>
 </div>
-<style>@media(max-width:900px){.dash-grid{grid-template-columns:1fr!important}}</style>
 {% endblock %}

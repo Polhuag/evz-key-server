@@ -5,65 +5,102 @@
 <div class="page-head">
   <div>
     <h1 class="page-title">Tạo key</h1>
-    <p class="page-desc">Key được tạo ngay và có thể dùng để đăng nhập</p>
+    <p class="page-desc">Key được tạo ngay và có thể dùng để đăng nhập vào game.</p>
   </div>
   <div class="page-actions"><a class="btn" href="/admin/keys">Quay lại</a></div>
 </div>
 
-<form method="post" action="/admin/keys/create">
-<div class="card" style="max-width:720px">
-  <div class="card-head"><h2 class="card-title">Thông tin key</h2></div>
-  <div class="card-body">
-    <div class="form-row">
-      <div class="field">
-        <label for="count">Số lượng</label>
-        <input id="count" name="count" type="number" value="1" min="1" max="200" required>
-        <div class="hint">Tối đa 200 key mỗi lần</div>
+<div class="split">
+  <form method="post" action="/admin/keys/create">
+    <div class="card">
+      <div class="card-head">
+        <div>
+          <h2 class="card-title">Thông tin key</h2>
+          <div class="card-sub">Thiết lập số lượng và thời hạn sử dụng</div>
+        </div>
       </div>
-      <div class="field">
-        <label for="days">Số ngày</label>
-        <input id="days" name="days" type="number" value="30" min="0" max="3650" required>
-        <div class="hint">0 = vĩnh viễn</div>
+      <div class="card-body">
+        <div class="form-row">
+          <div class="field">
+            <label for="count">Số lượng</label>
+            <input id="count" name="count" type="number" value="1" min="1" max="200" required>
+            <div class="hint">Tối đa 200 key mỗi lần</div>
+          </div>
+          <div class="field">
+            <label for="days">Số ngày</label>
+            <input id="days" name="days" type="number" value="30" min="0" max="3650" required>
+            <div class="hint">0 = vĩnh viễn</div>
+          </div>
+          <div class="field">
+            <label for="device_limit">Giới hạn thiết bị</label>
+            <select id="device_limit" name="device_limit">
+              <option value="1" selected>1 thiết bị</option>
+              <option value="2">2 thiết bị</option>
+              <option value="3">3 thiết bị</option>
+              <option value="5">5 thiết bị</option>
+            </select>
+            <div class="hint">Key gắn với thiết bị khi đăng nhập</div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="note">Ghi chú</label>
+          <input id="note" name="note" type="text" placeholder="VD: khách Zalo 04/11" maxlength="120">
+          <div class="hint">Chỉ hiển thị trong bảng quản trị, không gửi về client</div>
+        </div>
+
+        <div class="check-row">
+          <input id="free" name="free" type="checkbox" value="1">
+          <div>
+            <label for="free">Đưa vào kho key free</label>
+            <div class="hint">Key sẽ nằm trong kho phát miễn phí nếu tính năng đang bật</div>
+          </div>
+        </div>
       </div>
-      <div class="field">
-        <label for="device_limit">Giới hạn thiết bị</label>
-        <select id="device_limit" name="device_limit">
-          <option value="1" selected>1 thiết bị</option>
-          <option value="2">2 thiết bị</option>
-          <option value="3">3 thiết bị</option>
-          <option value="5">5 thiết bị</option>
-        </select>
-        <div class="hint">Key gắn với HWID khi đăng nhập</div>
+      <div class="card-foot" style="justify-content:flex-end">
+        <a class="btn" href="/admin/keys">Huỷ</a>
+        <button class="btn primary" type="submit">Tạo key</button>
       </div>
     </div>
+  </form>
 
-    <div class="field">
-      <label for="note">Ghi chú</label>
-      <input id="note" name="note" type="text" placeholder="VD: khách Zalo 04/11" maxlength="120">
-      <div class="hint">Chỉ hiển thị trong panel, không gửi về client</div>
-    </div>
-
-    <div class="check-row">
-      <input id="free" name="free" type="checkbox" value="1">
+  <div class="card">
+    <div class="card-head">
       <div>
-        <label for="free">Đưa vào kho key free</label>
-        <div class="hint">Key sẽ nằm trong kho phát miễn phí (nếu bật phát key free ở Cài đặt)</div>
+        <h2 class="card-title">Thông tin cần biết</h2>
+        <div class="card-sub">Cách key hoạt động</div>
       </div>
     </div>
-  </div>
-  <div class="card-head" style="border-top:1px solid var(--border);border-bottom:0;justify-content:flex-end">
-    <a class="btn" href="/admin/keys">Huỷ</a>
-    <button class="btn primary" type="submit">Tạo key</button>
-  </div>
-</div>
-</form>
-
-<div class="card" style="max-width:720px;margin-top:16px">
-  <div class="card-body">
-    <div class="kv">
-      <div class="k">Định dạng</div><div class="v mono">EVZ-XXXX-XXXX-XXXX-XXXX</div>
-      <div class="k">Bảo mật</div><div class="v">Khoá theo HWID, chữ ký RSA-2048 khi đăng nhập</div>
-      <div class="k">Gia hạn</div><div class="v">Cộng thêm ngày vào hạn hiện tại trong trang Key</div>
+    <div class="card-body">
+      <div class="stack" style="gap:16px">
+        <div style="display:flex;gap:12px">
+          <div class="stat-icon" style="flex:0 0 34px;width:34px;height:34px">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="8" cy="15" r="4"/><path d="M10.8 12.2 20 3M16 7l3 3M14 9l3 3"/></svg>
+          </div>
+          <div>
+            <div style="font-weight:600;font-size:13px">Định dạng key</div>
+            <div class="small muted" style="margin-top:2px">EVZ-XXXX-XXXX-XXXX-XXXX</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:12px">
+          <div class="stat-icon" style="flex:0 0 34px;width:34px;height:34px">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M11 18.5h2"/></svg>
+          </div>
+          <div>
+            <div style="font-weight:600;font-size:13px">Gắn với thiết bị</div>
+            <div class="small muted" style="margin-top:2px">Key tự động khoá vào thiết bị đầu tiên đăng nhập.</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:12px">
+          <div class="stat-icon" style="flex:0 0 34px;width:34px;height:34px">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+          </div>
+          <div>
+            <div style="font-weight:600;font-size:13px">Gia hạn dễ dàng</div>
+            <div class="small muted" style="margin-top:2px">Cộng thêm ngày vào hạn hiện tại ngay trong trang Key.</div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </div>

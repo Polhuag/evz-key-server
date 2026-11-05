@@ -160,6 +160,18 @@ def mask(s, keep=3):
     return s[:keep] + "*" * (len(s) - keep * 2) + s[-keep:]
 
 
+def mask_ip(s):
+    if not s:
+        return "—"
+    parts = str(s).split(".")
+    if len(parts) == 4:
+        return "%s.%s.*.*" % (parts[0], parts[1])
+    return mask(s, 3)
+
+
+templates.env.filters["mask_ip"] = mask_ip
+
+
 def client_ip(request: Request):
     fwd = request.headers.get("x-forwarded-for", "")
     if fwd:

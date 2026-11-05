@@ -9,13 +9,16 @@
   </div>
   <div class="page-actions">
     <a class="btn" href="/admin/keys?status=&q={{ q }}&sort={{ sort }}&dir={{ dir }}">Làm mới</a>
-    <a class="btn primary" href="/admin/keys/new">Tạo key</a>
+    <a class="btn primary" href="/admin/keys/new">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      Tạo key
+    </a>
   </div>
 </div>
 
 {% if created %}
 <div class="alert info" style="display:block">
-  <div style="margin-bottom:6px"><b>Đã tạo {{ created.split(',')|length }} key.</b> Bấm vào key để copy.</div>
+  <div style="margin-bottom:8px"><b>Đã tạo {{ created.split(',')|length }} key.</b> Bấm vào key để copy.</div>
   <div class="mono" style="display:flex;flex-wrap:wrap;gap:10px">
     {% for k in created.split(',') %}<span class="copy" data-copy="{{ k }}">{{ k }}</span>{% endfor %}
   </div>
@@ -38,7 +41,7 @@
       <input type="hidden" name="status" value="{{ status }}">
       <input type="hidden" name="sort" value="{{ sort }}">
       <input type="hidden" name="dir" value="{{ dir }}">
-      <input name="q" value="{{ q }}" placeholder="Tìm key / HWID / ghi chú" data-search>
+      <input name="q" value="{{ q }}" placeholder="Tìm key, thiết bị, ghi chú…" data-search>
     </form>
   </div>
 
@@ -46,7 +49,7 @@
   <div class="toolbar" id="bulkBar" style="display:none;background:var(--panel2)">
     <span class="small"><b id="selCount">0</b> key được chọn</span>
     <div class="spacer"></div>
-    <select name="action" style="width:auto;height:30px" aria-label="Thao tác hàng loạt">
+    <select name="action" style="width:auto;height:38px" aria-label="Thao tác hàng loạt">
       <option value="extend">Gia hạn 30 ngày</option>
       <option value="ban">Khoá</option>
       <option value="unban">Mở khoá</option>
@@ -63,21 +66,21 @@
     <table>
       <thead>
         <tr>
-          <th style="width:34px"><input class="check" type="checkbox" id="chkAll"></th>
+          <th style="width:38px"><input class="check" type="checkbox" id="chkAll" aria-label="Chọn tất cả"></th>
           <th><a href="/admin/keys?q={{ q }}&status={{ status }}&sort=key&dir={{ 'asc' if sort=='key' and dir=='desc' else 'desc' }}">Key <span class="arrow">{{ '↑' if sort=='key' and dir=='asc' else ('↓' if sort=='key' else '') }}</span></a></th>
           <th><a href="/admin/keys?q={{ q }}&status={{ status }}&sort=status&dir={{ 'asc' if sort=='status' and dir=='desc' else 'desc' }}">Trạng thái <span class="arrow">{{ '↑' if sort=='status' and dir=='asc' else ('↓' if sort=='status' else '') }}</span></a></th>
           <th>Thiết bị</th>
           <th><a href="/admin/keys?q={{ q }}&status={{ status }}&sort=expires&dir={{ 'asc' if sort=='expires' and dir=='desc' else 'desc' }}">Hết hạn <span class="arrow">{{ '↑' if sort=='expires' and dir=='asc' else ('↓' if sort=='expires' else '') }}</span></a></th>
           <th><a href="/admin/keys?q={{ q }}&status={{ status }}&sort=last_seen&dir={{ 'asc' if sort=='last_seen' and dir=='desc' else 'desc' }}">Dùng gần nhất <span class="arrow">{{ '↑' if sort=='last_seen' and dir=='asc' else ('↓' if sort=='last_seen' else '') }}</span></a></th>
           <th>Ghi chú</th>
-          <th style="width:44px"></th>
+          <th style="width:48px"></th>
         </tr>
       </thead>
       <tbody>
       {% for k in keys %}
         {% set st = status_of(k, now) %}
         <tr>
-          <td class="cell-check"><input class="check rowchk" type="checkbox" name="keys" value="{{ k.k }}"></td>
+          <td class="cell-check"><input class="check rowchk" type="checkbox" name="keys" value="{{ k.k }}" aria-label="Chọn {{ k.k }}"></td>
           <td data-label="Key"><span class="mono copy" data-copy="{{ k.k }}">{{ k.k }}</span></td>
           <td data-label="Trạng thái">
             {% if st=='active' %}<span class="badge ok">Hoạt động</span>
@@ -90,11 +93,11 @@
             {% else %}<span class="muted">—</span>{% endif %}
           </td>
           <td data-label="Hết hạn" class="small">{{ fmt(k.expires) if k.expires else 'Vĩnh viễn' }}</td>
-          <td data-label="Dùng gần nhất" class="small">{{ fmt(k.last_seen) if k.last_seen else '—' }}</td>
+          <td data-label="Dùng gần nhất" class="small muted">{{ fmt(k.last_seen) if k.last_seen else '—' }}</td>
           <td data-label="Ghi chú" class="small muted">{{ k.note or '—' }}</td>
           <td class="actions">
             <div class="menu">
-              <button class="btn ghost sm menu-toggle" type="button" aria-label="Thao tác">…</button>
+              <button class="btn ghost sm menu-toggle" type="button" aria-label="Thao tác">⋯</button>
               <div class="menu-pop">
                 <button type="button" data-copy="{{ k.k }}">Copy key</button>
                 <button type="button" class="rowact" data-key="{{ k.k }}" data-act="extend">Gia hạn 30 ngày</button>
@@ -125,6 +128,7 @@
   </div>
   {% else %}
   <div class="empty">
+    <div class="empty-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="M10.8 12.2 20 3M16 7l3 3M14 9l3 3"/></svg></div>
     <p>Không có key nào phù hợp với bộ lọc hiện tại.</p>
     <a class="btn" href="/admin/keys/new">Tạo key đầu tiên</a>
   </div>
@@ -156,5 +160,4 @@
   });
 })();
 </script>
-<a class="fab" href="/admin/keys/new">Tạo key</a>
 {% endblock %}
