@@ -26,6 +26,8 @@ ADMIN_USER = os.environ.get("ADMIN_USER", "admin")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
 ADMIN_IP_ALLOW = [x.strip() for x in os.environ.get("ADMIN_IP_ALLOW", "").split(",") if x.strip()]
 SESSION_HOURS = int(os.environ.get("SESSION_HOURS", "12"))
+LIB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib")
+LOCAL_LIB = os.path.join(LIB_DIR, "current.so")
 COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "1") == "1"
 FREE_ENABLED = os.environ.get("FREE_KEYS_ENABLED", "0") == "1"
 TZ = timezone(timedelta(hours=7))
@@ -449,6 +451,7 @@ async def heartbeat(request: Request):
             "payload": payload_b64,
             "sig": sig_b64,
             "EXP": fmt_ts(rec.get("expires") or 0),
+            "ticket": ticket_make(game, serial, key),
         },
     })
 
@@ -475,6 +478,12 @@ def api_lib_file(ticket: str = "", game: str = ""):
     blob = kv.get("lib:%s:blob:%s" % (game, rid)) if rid else None
     if not blob:
         blob = kv.get("lib:%s:blob" % game)
+    if not blob:
+        try:
+            with open(LOCAL_LIB, "rb") as f:
+                blob = f.read()
+        except Exception:
+            blob = None
     if not blob:
         raise HTTPException(status_code=404, detail="no lib")
     headers = {"X-Lib-Version": str(meta.get("version", "")), "X-Lib-Md5": str(meta.get("md5", ""))}
@@ -882,9 +891,15 @@ async def admin_releases_upload(file: UploadFile = File(...), version: str = For
             "uploaded": now_ts(), "filename": file.filename or "libMyLibName.so",
             "notes": notes.strip()[:600], "mandatory": bool(mandatory)}
     kv.set("lib:%s:blob:%s" % (GAME_ID, rid), blob)
+    try:
+        os.makedirs(LIB_DIR, exist_ok=True)
+        with open(LOCAL_LIB, "wb") as f:
+            f.write(blob)
+    except Exception:
+        pass
     kv.set("lib:%s:meta" % GAME_ID, json.dumps(meta, ensure_ascii=False).encode())
     kv.lpush("lib:%s:releases" % GAME_ID, json.dumps(meta, ensure_ascii=False).encode())
-    keep = releases_list()[3:]
+    keep = releases_list()[1:]
     for old in keep:
         kv.delete("lib:%s:blob:%s" % (GAME_ID, old.get("id", "")))
     return RedirectResponse("/admin/releases?ok=1", status_code=303)
