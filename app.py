@@ -361,6 +361,7 @@ async def connect(request: Request):
         "ls": int(meta.get("size") or 0),
         "ln": str(meta.get("notes") or ""),
         "lmust": 1 if meta.get("mandatory", True) else 0,
+        "fr": 1 if rec.get("free") else 0,
     }
     payload_b64, sig_b64 = sign_payload(payload)
     lib = None
@@ -439,6 +440,7 @@ async def heartbeat(request: Request):
         "r": now_ts(),
         "hb": 1,
         "e": rec.get("expires") or 0,
+        "fr": 1 if rec.get("free") else 0,
     }
     payload_b64, sig_b64 = sign_payload(payload)
     return JSONResponse({
