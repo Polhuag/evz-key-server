@@ -222,14 +222,14 @@ def valid_key_format(k):
 def ticket_make(game, serial, key, ttl=600):
     body = canonical({"g": game, "s": serial, "k": key, "x": now_ts() + ttl})
     mac = hmac.new(os.environ.get("TICKET_SECRET", "evz").encode(), body, hashlib.sha256).digest()
-    return b64e(body) + "." + b64e(mac)
+    return base64.urlsafe_b64encode(body).decode().rstrip("=") + "." + base64.urlsafe_b64encode(mac).decode().rstrip("=")
 
 
 def ticket_check(ticket, game):
     try:
         body_b64, mac_b64 = ticket.split(".", 1)
-        body = b64d(body_b64)
-        mac = b64d(mac_b64)
+        body = base64.urlsafe_b64decode(body_b64 + "=" * (-len(body_b64) % 4))
+        mac = base64.urlsafe_b64decode(mac_b64 + "=" * (-len(mac_b64) % 4))
         want = hmac.new(os.environ.get("TICKET_SECRET", "evz").encode(), body, hashlib.sha256).digest()
         if not hmac.compare_digest(mac, want):
             return None
