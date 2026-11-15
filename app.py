@@ -731,7 +731,9 @@ def admin_keys_create(count: int = Form(1), days: int = Form(30), note: str = Fo
 
 
 @app.post("/admin/keys/action")
-def admin_keys_action(action: str = Form(...), key: str = Form(...), value: str = Form("")):
+def admin_keys_action(request: Request, action: str = Form(...), key: str = Form(...), value: str = Form("")):
+    if not check_session(request):
+        return RedirectResponse("/admin/login", status_code=303)
     rec = get_key(key.strip().upper())
     if rec:
         if action == "delete":
@@ -769,7 +771,9 @@ def request_referer_key():
 
 
 @app.post("/admin/keys/bulk")
-def admin_keys_bulk(action: str = Form(...), keys: list[str] = Form([])):
+def admin_keys_bulk(request: Request, action: str = Form(...), keys: list[str] = Form([])):
+    if not check_session(request):
+        return RedirectResponse("/admin/login", status_code=303)
     done = 0
     for k in keys:
         rec = get_key(k.strip().upper())
@@ -826,7 +830,9 @@ def admin_devices(request: Request, q: str = "", state: str = ""):
 
 
 @app.post("/admin/devices/action")
-def admin_devices_action(serial: str = Form(...), action: str = Form(...)):
+def admin_devices_action(request: Request, serial: str = Form(...), action: str = Form(...)):
+    if not check_session(request):
+        return RedirectResponse("/admin/login", status_code=303)
     serial = serial.strip()
     if action == "unbind":
         for rec in all_keys():
@@ -874,8 +880,10 @@ def admin_releases(request: Request):
 
 
 @app.post("/admin/releases/upload")
-async def admin_releases_upload(file: UploadFile = File(...), version: str = Form(""),
+async def admin_releases_upload(request: Request, file: UploadFile = File(...), version: str = Form(""),
                                 notes: str = Form(""), mandatory: str = Form("")):
+    if not check_session(request):
+        return RedirectResponse("/admin/login", status_code=303)
     blob = await file.read()
     if not blob:
         return RedirectResponse("/admin/releases?err=empty", status_code=303)
@@ -906,7 +914,9 @@ async def admin_releases_upload(file: UploadFile = File(...), version: str = For
 
 
 @app.post("/admin/releases/activate")
-def admin_releases_activate(rid: str = Form(...)):
+def admin_releases_activate(request: Request, rid: str = Form(...)):
+    if not check_session(request):
+        return RedirectResponse("/admin/login", status_code=303)
     for it in releases_list():
         if it.get("id") == rid:
             if kv.get("lib:%s:blob:%s" % (GAME_ID, rid)) is None:
@@ -917,7 +927,9 @@ def admin_releases_activate(rid: str = Form(...)):
 
 
 @app.post("/admin/releases/delete")
-def admin_releases_delete(rid: str = Form(...)):
+def admin_releases_delete(request: Request, rid: str = Form(...)):
+    if not check_session(request):
+        return RedirectResponse("/admin/login", status_code=303)
     meta = lib_meta(GAME_ID) or {}
     if meta.get("id") == rid:
         return RedirectResponse("/admin/releases?err=active", status_code=303)
@@ -944,7 +956,9 @@ def admin_free_stock(request: Request):
 
 
 @app.post("/admin/free-stock/add")
-def admin_free_stock_add(count: int = Form(10), days: int = Form(3)):
+def admin_free_stock_add(request: Request, count: int = Form(10), days: int = Form(3)):
+    if not check_session(request):
+        return RedirectResponse("/admin/login", status_code=303)
     count = max(1, min(100, int(count)))
     days = max(1, min(365, int(days)))
     created = now_ts()
@@ -960,7 +974,9 @@ def admin_free_stock_add(count: int = Form(10), days: int = Form(3)):
 
 
 @app.post("/admin/free-stock/remove")
-def admin_free_stock_remove(key: str = Form(...)):
+def admin_free_stock_remove(request: Request, key: str = Form(...)):
+    if not check_session(request):
+        return RedirectResponse("/admin/login", status_code=303)
     rec = get_key(key.strip().upper())
     if rec and rec.get("free") and not rec.get("used"):
         kv.delete("key:" + rec["k"])
@@ -1031,8 +1047,10 @@ def admin_settings(request: Request):
 
 
 @app.post("/admin/settings/password")
-def admin_settings_password(username: str = Form(""), password: str = Form(""),
+def admin_settings_password(request: Request, username: str = Form(""), password: str = Form(""),
                             password2: str = Form("")):
+    if not check_session(request):
+        return RedirectResponse("/admin/login", status_code=303)
     if not username.strip() or len(password) < 6:
         return RedirectResponse("/admin/settings?err=short", status_code=303)
     if password != password2:
@@ -1048,7 +1066,9 @@ def admin_settings_password(username: str = Form(""), password: str = Form(""),
 
 
 @app.post("/admin/settings/free")
-def admin_settings_free(enabled: str = Form("")):
+def admin_settings_free(request: Request, enabled: str = Form("")):
+    if not check_session(request):
+        return RedirectResponse("/admin/login", status_code=303)
     kv.set("cfg:free", b"1" if enabled else b"0")
     return RedirectResponse("/admin/settings?ok=1", status_code=303)
 
