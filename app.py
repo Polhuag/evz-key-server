@@ -17,6 +17,9 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 
 from store import open_store
+import struct
+import random
+import gate
 
 APP_NAME = os.environ.get("APP_NAME", "EVOLUTIONZ V2")
 GAME_ID = os.environ.get("GAME_ID", "com.garena.game.kgvn")
@@ -364,6 +367,8 @@ async def connect(request: Request):
         "ln": str(meta.get("notes") or ""),
         "lmust": 1 if meta.get("mandatory", True) else 0,
         "fr": 1 if rec.get("free") else 0,
+        "v2": 1 if GATE_ON else 0,
+        "strict": 1 if GATE_STRICT else 0,
     }
     payload_b64, sig_b64 = sign_payload(payload)
     lib = None
@@ -488,6 +493,215 @@ def api_lib_file(ticket: str = "", game: str = ""):
         raise HTTPException(status_code=404, detail="no lib")
     headers = {"X-Lib-Version": str(meta.get("version", "")), "X-Lib-Md5": str(meta.get("md5", ""))}
     return Response(content=blob, media_type="application/octet-stream", headers=headers)
+
+
+GATE_ON = os.environ.get("EVZ_GATE", "1") == "1"
+GATE_STRICT = os.environ.get("EVZ_STRICT", "0") == "1"
+GATE_MODE = int(os.environ.get("EVZ_MODULE_MODE", "0"))
+GATE_ENFORCE = os.environ.get("EVZ_ENFORCE", "0") == "1"
+GATE_CERTS = [x.strip().lower().replace(":", "") for x in os.environ.get("EVZ_CERT_SHA256", "").split(",") if x.strip()]
+
+_plan_cache = {}
+
+
+def lib_blob(game):
+    meta = lib_meta(game) or {}
+    rid = meta.get("id")
+    blob = kv.get("lib:%s:blob:%s" % (game, rid)) if rid else None
+    if not blob:
+        blob = kv.get("lib:%s:blob" % game)
+    if not blob:
+        try:
+            with open(LOCAL_LIB, "rb") as f:
+                blob = f.read()
+        except Exception:
+            blob = None
+    return meta, blob
+
+
+def module_plan(game):
+    meta, blob = lib_blob(game)
+    if not blob:
+        return None
+    key = (meta.get("md5") or "") + ":" + hashlib.md5(blob).hexdigest() + ":" + str(gate.CHUNK_SIZE)
+    plan = _plan_cache.get(key)
+    if plan is None:
+        chunks, leaves, root = gate.build_module(blob, gate.CHUNK_SIZE)
+        plan = {"chunks": chunks, "leaves": leaves, "root": root,
+                "ldig": gate.leaves_digest(leaves), "md5": hashlib.md5(blob).hexdigest(),
+                "ver": str(meta.get("version") or "")}
+        if len(_plan_cache) > 4:
+            _plan_cache.clear()
+        _plan_cache[key] = plan
+    return plan
+
+
+def gate_sess_key(sid):
+    return "v2s:" + sid
+
+
+def gate_load(sid):
+    raw = kv.get(gate_sess_key(sid))
+    if not raw:
+        return None
+    try:
+        return json.loads(raw.decode())
+    except Exception:
+        return None
+
+
+def gate_store(sess):
+    kv.set(gate_sess_key(sess["sid"]), json.dumps(sess).encode())
+
+
+def gate_blocked(serial):
+    return kv.get("v2b:" + gate.blake(serial.encode(), size=16).hex()) is not None
+
+
+@app.post("/v2/open")
+async def v2_open(request: Request):
+    ip = client_ip(request)
+    if not GATE_ON:
+        return JSONResponse({"ok": 0, "r": "off"})
+    ctype = request.headers.get("content-type", "")
+    body = await request.json() if "application/json" in ctype else dict(await request.form())
+    try:
+        key = str(body.get("key") or "").strip().upper()
+        serial = str(body.get("serial") or "").strip()
+        cert = str(body.get("cert") or "").strip().lower().replace(":", "")
+        build = str(body.get("build") or "").strip()
+        cpub = base64.b64decode(str(body.get("cpub") or ""))
+        cn = base64.b64decode(str(body.get("cn") or ""))
+        proof = base64.b64decode(str(body.get("proof") or ""))
+    except Exception:
+        return JSONResponse({"ok": 0, "r": "bad"})
+    if len(cpub) != 32 or len(cn) != 16 or len(proof) != 32:
+        return JSONResponse({"ok": 0, "r": "bad"})
+    if not rl.hit("v2o:" + ip, 20, 60):
+        return JSONResponse({"ok": 0, "r": "rate"})
+    if GATE_CERTS and cert not in GATE_CERTS:
+        log_event({"ip": ip, "key": mask(key), "serial": mask(serial), "ok": 0, "r": "cert", "ver": build})
+        return JSONResponse({"ok": 0, "r": "cert"})
+    if gate_blocked(serial):
+        return JSONResponse({"ok": 0, "r": "locked"})
+
+    rec = get_key(key)
+    if rec is None or (rec.get("game") and rec["game"] != GAME_ID) or rec.get("banned") or \
+            (rec.get("expires") and rec["expires"] < now_ts()):
+        return JSONResponse({"ok": 0, "r": "denied"})
+    serials = rec.get("serials") or []
+    if serial not in serials:
+        if len(serials) >= int(rec.get("device_limit") or 1):
+            return JSONResponse({"ok": 0, "r": "denied"})
+        serials.append(serial)
+        rec["serials"] = serials
+        put_key(rec)
+
+    want = gate.proof(key, serial, cert, build, cpub, cn)
+    if not hmac.compare_digest(want, proof):
+        log_event({"ip": ip, "key": mask(key), "serial": mask(serial), "ok": 0, "r": "proof", "ver": build})
+        return JSONResponse({"ok": 0, "r": "denied"})
+
+    plan = module_plan(GAME_ID)
+    if not plan:
+        return JSONResponse({"ok": 0, "r": "norelease"})
+
+    sid = os.urandom(16)
+    sn = os.urandom(16)
+    sk, spub = gate.x25519_pair()
+    exp = now_ts() + gate.SESSION_TTL
+    perm = list(range(len(plan["chunks"])))
+    random.SystemRandom().shuffle(perm)
+    sess = {"sid": sid.hex(), "sk": base64.b64encode(sk).decode(),
+            "cpub": base64.b64encode(cpub).decode(), "cn": base64.b64encode(cn).decode(),
+            "sn": base64.b64encode(sn).decode(), "spub": base64.b64encode(spub).decode(),
+            "key": key, "serial": serial, "cert": cert, "build": build,
+            "md5": plan["md5"], "ver": plan["ver"], "n": len(plan["chunks"]),
+            "csz": gate.CHUNK_SIZE, "mode": GATE_MODE, "exp": exp,
+            "perm": perm, "used": {}, "cnt": 0}
+    gate_store(sess)
+
+    tr = gate.manifest(sid, sn, spub, cpub, cn, sess["n"], sess["csz"], GATE_MODE,
+                       sess["ver"], plan["root"], plan["ldig"], exp)
+    sig = PRIVATE_KEY.sign(tr, padding.PKCS1v15(), hashes.SHA256()) if PRIVATE_KEY else b""
+    log_event({"ip": ip, "key": mask(key), "serial": mask(serial), "ok": 1, "r": "v2", "ver": build})
+    return JSONResponse({
+        "ok": 1, "sid": sid.hex(), "sn": base64.b64encode(sn).decode(),
+        "spub": base64.b64encode(spub).decode(), "n": sess["n"], "csz": sess["csz"],
+        "mode": GATE_MODE, "x": exp, "ver": sess["ver"], "md5": plan["md5"],
+        "root": base64.b64encode(plan["root"]).decode(),
+        "leaves": [base64.b64encode(x).decode() for x in plan["leaves"]],
+        "sig": base64.b64encode(sig).decode(),
+        "strict": 1 if GATE_STRICT else 0,
+    })
+
+
+@app.post("/v2/sh")
+async def v2_sh(request: Request):
+    ip = client_ip(request)
+    if not GATE_ON:
+        return JSONResponse({"ok": 0, "r": "off"})
+    try:
+        body = await request.json()
+        sid = str(body.get("sid") or "")
+        want = [int(x) for x in (body.get("i") or [])]
+    except Exception:
+        return JSONResponse({"ok": 0, "r": "bad"})
+    if not sid or not want or len(want) > gate.BATCH_MAX:
+        return JSONResponse({"ok": 0, "r": "bad"})
+    if not rl.hit("v2s:" + ip, 600, 60):
+        return JSONResponse({"ok": 0, "r": "rate"})
+    sess = gate_load(sid)
+    if not sess or sess["exp"] < now_ts():
+        return JSONResponse({"ok": 0, "r": "expired"})
+    plan = module_plan(GAME_ID)
+    if not plan or plan["md5"] != sess["md5"]:
+        return JSONResponse({"ok": 0, "r": "norelease"})
+    sidb = bytes.fromhex(sid)
+    sk = base64.b64decode(sess["sk"])
+    cpub = base64.b64decode(sess["cpub"])
+    spub = base64.b64decode(sess["spub"])
+    sn = base64.b64decode(sess["sn"])
+    cn = base64.b64decode(sess["cn"])
+    shared = gate.x25519_shared(sk, cpub)
+    skey = gate.session_key(shared, sidb, sn, cpub, spub, cn)
+    out = []
+    for slot in want:
+        if slot < 0 or slot >= sess["n"]:
+            continue
+        n_used = int(sess["used"].get(str(slot), 0))
+        if n_used >= 3:
+            continue
+        sess["used"][str(slot)] = n_used + 1
+        sess["cnt"] = int(sess.get("cnt") or 0) + 1
+        if sess["cnt"] > sess["n"] * 4 + 40:
+            break
+        idx = sess["perm"][slot]
+        nonce = os.urandom(24)
+        aad = gate.chunk_aad(sidb, slot)
+        sealed = gate.seal(skey, nonce, aad, plan["chunks"][idx])
+        out.append({"i": slot, "d": base64.b64encode(nonce + sealed).decode(),
+                    "t": base64.b64encode(gate.index_tag(skey, sidb, slot)).decode()})
+    gate_store(sess)
+    return JSONResponse({"ok": 1, "c": out})
+
+
+@app.post("/v2/flag")
+async def v2_flag(request: Request):
+    ctype = request.headers.get("content-type", "")
+    body = await request.json() if "application/json" in ctype else dict(await request.form())
+    key = str(body.get("key") or "").strip().upper()
+    serial = str(body.get("serial") or "").strip()
+    reason = str(body.get("reason") or "")[:40]
+    ip = client_ip(request)
+    rec = get_key(key)
+    if rec is not None:
+        rec["flag_last"] = {"r": reason, "t": now_ts(), "s": mask(serial)}
+        put_key(rec)
+    log_event({"ip": ip, "key": mask(key), "serial": mask(serial), "ok": 0, "r": "flag:" + reason, "ver": ""})
+    if GATE_ENFORCE and reason in ("tamper", "debug", "hook"):
+        kv.set("v2b:" + gate.blake(serial.encode(), size=16).hex(), str(now_ts() + 3600).encode())
+    return JSONResponse({"ok": 1})
 
 
 @app.post("/api/free")
