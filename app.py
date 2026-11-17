@@ -474,10 +474,15 @@ def api_lib_info(ticket: str = "", game: str = ""):
 
 
 @app.get("/api/lib/file")
-def api_lib_file(ticket: str = "", game: str = ""):
+def api_lib_file(ticket: str = "", game: str = "", apk: str = ""):
     game = game or GAME_ID
     if not ticket_check(ticket, game):
         raise HTTPException(status_code=403, detail="invalid ticket")
+    _m = lib_meta(game) or {}
+    _want = str(_m.get("apk") or "").lower()
+    if _want and not hmac.compare_digest(_want, apk.strip().lower()):
+        log_event({"ip": "-", "key": "-", "serial": "-", "ok": 0, "r": "apk-legacy", "ver": str(_m.get("version", ""))})
+        raise HTTPException(status_code=403, detail="apk mismatch")
     meta = lib_meta(game) or {}
     rid = meta.get("id")
     blob = kv.get("lib:%s:blob:%s" % (game, rid)) if rid else None
@@ -498,7 +503,7 @@ def api_lib_file(ticket: str = "", game: str = ""):
 GATE_ON = os.environ.get("EVZ_GATE", "1") == "1"
 GATE_STRICT = os.environ.get("EVZ_STRICT", "0") == "1"
 GATE_MODE = int(os.environ.get("EVZ_MODULE_MODE", "1"))
-GATE_ENFORCE = os.environ.get("EVZ_ENFORCE", "0") == "1"
+GATE_ENFORCE = os.environ.get("EVZ_ENFORCE", "1") == "1"
 GATE_CERTS = [x.strip().lower().replace(":", "") for x in os.environ.get(
     "EVZ_CERT_SHA256",
     "06a76d3b576fa5e0fd532e82b41030ab8776df04704b25047d70ad8d8dbf1d82").split(",") if x.strip()]
@@ -584,6 +589,11 @@ async def v2_open(request: Request):
     if GATE_CERTS and cert not in GATE_CERTS:
         log_event({"ip": ip, "key": mask(key), "serial": mask(serial), "ok": 0, "r": "cert", "ver": build})
         return JSONResponse({"ok": 0, "r": "cert"})
+    meta_now = lib_meta(GAME_ID) or {}
+    want_apk = str(meta_now.get("apk") or "").lower()
+    if want_apk and not hmac.compare_digest(want_apk, str(body.get("apk") or "").strip().lower()):
+        log_event({"ip": ip, "key": mask(key), "serial": mask(serial), "ok": 0, "r": "apk", "ver": build})
+        return JSONResponse({"ok": 0, "r": "apk"})
     if gate_blocked(serial):
         return JSONResponse({"ok": 0, "r": "locked"})
 
@@ -1097,7 +1107,8 @@ def admin_releases(request: Request):
 
 @app.post("/admin/releases/upload")
 async def admin_releases_upload(request: Request, file: UploadFile = File(...), version: str = Form(""),
-                                notes: str = Form(""), mandatory: str = Form("")):
+                                notes: str = Form(""), mandatory: str = Form(""),
+                                apk_sha: str = Form("")):
     if not check_session(request):
         return RedirectResponse("/admin/login", status_code=303)
     blob = await file.read()
@@ -1113,7 +1124,8 @@ async def admin_releases_upload(request: Request, file: UploadFile = File(...), 
     rid = "%d-%s" % (now_ts(), secrets.token_hex(3))
     meta = {"id": rid, "version": ver, "md5": md5, "sha256": sha256, "size": len(blob),
             "uploaded": now_ts(), "filename": file.filename or "libMyLibName.so",
-            "notes": notes.strip()[:600], "mandatory": bool(mandatory)}
+            "notes": notes.strip()[:600], "mandatory": bool(mandatory),
+            "apk": apk_sha.strip().lower()[:64]}
     kv.set("lib:%s:blob:%s" % (GAME_ID, rid), blob)
     try:
         os.makedirs(LIB_DIR, exist_ok=True)
