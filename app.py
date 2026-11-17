@@ -499,7 +499,9 @@ GATE_ON = os.environ.get("EVZ_GATE", "1") == "1"
 GATE_STRICT = os.environ.get("EVZ_STRICT", "0") == "1"
 GATE_MODE = int(os.environ.get("EVZ_MODULE_MODE", "0"))
 GATE_ENFORCE = os.environ.get("EVZ_ENFORCE", "0") == "1"
-GATE_CERTS = [x.strip().lower().replace(":", "") for x in os.environ.get("EVZ_CERT_SHA256", "").split(",") if x.strip()]
+GATE_CERTS = [x.strip().lower().replace(":", "") for x in os.environ.get(
+    "EVZ_CERT_SHA256",
+    "06a76d3b576fa5e0fd532e82b41030ab8776df04704b25047d70ad8d8dbf1d82").split(",") if x.strip()]
 
 _plan_cache = {}
 
