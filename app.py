@@ -476,6 +476,9 @@ def api_lib_info(ticket: str = "", game: str = ""):
 @app.get("/api/lib/file")
 def api_lib_file(ticket: str = "", game: str = "", apk: str = ""):
     game = game or GAME_ID
+    if GATE_STRICT:
+        log_event({"ip": "-", "key": "-", "serial": "-", "ok": 0, "r": "strict", "ver": ""})
+        raise HTTPException(status_code=403, detail="strict")
     if not ticket_check(ticket, game):
         raise HTTPException(status_code=403, detail="invalid ticket")
     _m = lib_meta(game) or {}
@@ -501,7 +504,7 @@ def api_lib_file(ticket: str = "", game: str = "", apk: str = ""):
 
 
 GATE_ON = os.environ.get("EVZ_GATE", "1") == "1"
-GATE_STRICT = os.environ.get("EVZ_STRICT", "0") == "1"
+GATE_STRICT = os.environ.get("EVZ_STRICT", "1") == "1"
 GATE_MODE = int(os.environ.get("EVZ_MODULE_MODE", "1"))
 GATE_ENFORCE = os.environ.get("EVZ_ENFORCE", "1") == "1"
 GATE_CERTS = [x.strip().lower().replace(":", "") for x in os.environ.get(
