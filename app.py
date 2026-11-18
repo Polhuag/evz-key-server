@@ -614,7 +614,18 @@ async def v2_open(request: Request):
 
     want = gate.proof(key, serial, cert, build, cpub, cn)
     if not hmac.compare_digest(want, proof):
-        log_event({"ip": ip, "key": mask(key), "serial": mask(serial), "ok": 0, "r": "proof", "ver": build})
+        alts = {
+            "c0": gate.proof(key, serial, "", build, cpub, cn),
+            "s0": gate.proof(key, "", cert, build, cpub, cn),
+            "kL": gate.proof(key.lower(), serial, cert, build, cpub, cn),
+            "kU": gate.proof(key.upper(), serial, cert, build, cpub, cn),
+            "b0": gate.proof(key, serial, cert, "", cpub, cn),
+            "sw": gate.proof(key, serial, cert, build, cn, cpub),
+        }
+        hit = [k for k, v in alts.items() if hmac.compare_digest(v, proof)]
+        log_event({"ip": ip, "key": mask(key), "serial": mask(serial), "ok": 0,
+                   "r": "proof:" + (",".join(hit) or "none"), "ver": build,
+                   "cert": cert[:10], "ser": repr(serial)[:24]})
         return JSONResponse({"ok": 0, "r": "denied"})
 
     plan = module_plan(GAME_ID)
