@@ -580,9 +580,9 @@ async def v2_open(request: Request):
         serial = str(body.get("serial") or "").strip()
         cert = str(body.get("cert") or "").strip().lower().replace(":", "")
         build = str(body.get("build") or "").strip()
-        cpub = base64.b64decode(str(body.get("cpub") or ""))
-        cn = base64.b64decode(str(body.get("cn") or ""))
-        proof = base64.b64decode(str(body.get("proof") or ""))
+        cpub = base64.b64decode(str(body.get("cpub") or "").replace(" ", "+"))
+        cn = base64.b64decode(str(body.get("cn") or "").replace(" ", "+"))
+        proof = base64.b64decode(str(body.get("proof") or "").replace(" ", "+"))
     except Exception:
         return JSONResponse({"ok": 0, "r": "bad"})
     if len(cpub) != 32 or len(cn) != 16 or len(proof) != 32:
