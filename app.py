@@ -1146,9 +1146,11 @@ async def admin_releases_upload(request: Request, file: UploadFile = File(...), 
         return RedirectResponse("/admin/releases?err=notelf", status_code=303)
     prev_apk = str((lib_meta(GAME_ID) or {}).get("apk") or "").lower().replace(",", " ").split()
     for extra in apk_sha.strip().lower().replace(",", " ").split():
+        if extra == "clear":
+            prev_apk = []
+            continue
         if len(extra) == 64 and extra not in prev_apk:
             prev_apk.append(extra)
-    prev_apk = prev_apk[-20:]
     md5 = hashlib.md5(blob).hexdigest()
     sha256 = hashlib.sha256(blob).hexdigest()
     ver = version.strip() or datetime.now(TZ).strftime("%Y%m%d-%H%M")
