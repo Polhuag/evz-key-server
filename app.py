@@ -482,9 +482,8 @@ def api_lib_file(ticket: str = "", game: str = "", apk: str = ""):
     if not ticket_check(ticket, game):
         raise HTTPException(status_code=403, detail="invalid ticket")
     _m = lib_meta(game) or {}
-    _want = str(_m.get("apk") or "").lower()
-    if _want and not hmac.compare_digest(_want, apk.strip().lower()):
-        log_event({"ip": "-", "key": "-", "serial": "-", "ok": 0, "r": "apk-legacy", "ver": str(_m.get("version", ""))})
+    if not apk_ok(_m, apk):
+        log_event({"ip": "-", "key": "-", "serial": "-", "ok": 0, "r": "apk-legacy:" + apk.strip().lower()[:12], "ver": str(_m.get("version", ""))})
         raise HTTPException(status_code=403, detail="apk mismatch")
     meta = lib_meta(game) or {}
     rid = meta.get("id")
@@ -512,6 +511,19 @@ GATE_CERTS = [x.strip().lower().replace(":", "") for x in os.environ.get(
     "06a76d3b576fa5e0fd532e82b41030ab8776df04704b25047d70ad8d8dbf1d82").split(",") if x.strip()]
 
 _plan_cache = {}
+
+
+def apk_ok(meta, got):
+    want = str((meta or {}).get("apk") or "").lower().replace(",", " ").split()
+    got = str(got or "").strip().lower()
+    if not want:
+        return True
+    if not got:
+        return False
+    for w in want:
+        if hmac.compare_digest(w, got):
+            return True
+    return False
 
 
 def lib_blob(game):
@@ -593,9 +605,9 @@ async def v2_open(request: Request):
         log_event({"ip": ip, "key": mask(key), "serial": mask(serial), "ok": 0, "r": "cert", "ver": build})
         return JSONResponse({"ok": 0, "r": "cert"})
     meta_now = lib_meta(GAME_ID) or {}
-    want_apk = str(meta_now.get("apk") or "").lower()
-    if want_apk and not hmac.compare_digest(want_apk, str(body.get("apk") or "").strip().lower()):
-        log_event({"ip": ip, "key": mask(key), "serial": mask(serial), "ok": 0, "r": "apk", "ver": build})
+    if not apk_ok(meta_now, body.get("apk")):
+        log_event({"ip": ip, "key": mask(key), "serial": mask(serial), "ok": 0,
+                   "r": "apk:" + str(body.get("apk") or "").strip().lower()[:12], "ver": build})
         return JSONResponse({"ok": 0, "r": "apk"})
     if gate_blocked(serial):
         return JSONResponse({"ok": 0, "r": "locked"})
@@ -1132,6 +1144,11 @@ async def admin_releases_upload(request: Request, file: UploadFile = File(...), 
         return RedirectResponse("/admin/releases?err=size", status_code=303)
     if blob[:4] != b"\x7fELF":
         return RedirectResponse("/admin/releases?err=notelf", status_code=303)
+    prev_apk = str((lib_meta(GAME_ID) or {}).get("apk") or "").lower().replace(",", " ").split()
+    for extra in apk_sha.strip().lower().replace(",", " ").split():
+        if len(extra) == 64 and extra not in prev_apk:
+            prev_apk.append(extra)
+    prev_apk = prev_apk[-20:]
     md5 = hashlib.md5(blob).hexdigest()
     sha256 = hashlib.sha256(blob).hexdigest()
     ver = version.strip() or datetime.now(TZ).strftime("%Y%m%d-%H%M")
@@ -1139,7 +1156,7 @@ async def admin_releases_upload(request: Request, file: UploadFile = File(...), 
     meta = {"id": rid, "version": ver, "md5": md5, "sha256": sha256, "size": len(blob),
             "uploaded": now_ts(), "filename": file.filename or "libMyLibName.so",
             "notes": notes.strip()[:600], "mandatory": bool(mandatory),
-            "apk": apk_sha.strip().lower()[:64]}
+            "apk": " ".join(prev_apk)[:2048]}
     kv.set("lib:%s:blob:%s" % (GAME_ID, rid), blob)
     try:
         os.makedirs(LIB_DIR, exist_ok=True)
