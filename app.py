@@ -1260,7 +1260,7 @@ def admin_home(request: Request):
     devs = all_devices()
     return templates.TemplateResponse("dashboard.html", {
         "request": request, "app": APP_NAME, "user_name": auth_user(), "page_name": "home", "stats": stats(),
-        "lib": lib_meta(GAME_ID), "logs": recent_logs(8), "fmt": fmt_ts, "mask": mask,
+        "lib": lib_meta(GAME_ID), "logs": recent_logs(24), "fmt": fmt_ts, "mask": mask,
         "soon": soon[:5], "online": [d for d in devs if d["online"]][:5], "now": t,
         "status_of": key_status, "labels": STATUS_LABEL,
     })

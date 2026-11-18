@@ -176,7 +176,7 @@
             <tr>
               <td data-label="Thời gian" class="small muted">{{ fmt(l.t) }}</td>
               <td data-label="Key" class="mono small">{{ l.key }}</td>
-              <td data-label="Kết quả">{% if l.ok %}<span class="badge ok">Thành công</span>{% else %}<span class="badge bad">Từ chối</span>{% endif %}</td>
+              <td data-label="Kết quả">{% if l.ok %}<span class="badge ok">Thành công</span>{% else %}<span class="badge bad">Từ chối</span>{% if l.r %} <span class="mono small muted">{{ l.r }}</span>{% endif %}{% endif %}</td>
             </tr>
           {% endfor %}
           </tbody>
