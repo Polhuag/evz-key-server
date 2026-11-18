@@ -40,7 +40,7 @@ def session_key(shared, sid, sn, cpub, spub, cn):
 
 
 def proof(key, serial, cert, build, cpub, cn):
-    k = sha256(("%s|%s|%s|%s" % (key, serial, cert, build)).encode())
+    k = blake(("%s|%s|%s|%s" % (key, serial, cert, build)).encode(), size=32)
     return blake(b"EVZ2P" + cpub + cn + build.encode(), key=k, size=32)
 
 
