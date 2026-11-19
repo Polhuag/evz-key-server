@@ -1,0 +1,32 @@
+{% extends "admin_base.html" %}
+{% block title %}Log {{ dev }} · {{ app }}{% endblock %}
+{% block crumb %}Nhật ký client{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Log {{ dev }}</h1>
+    <p class="page-desc">Phiên bản {{ ver or '—' }} · lần cuối {{ fmt(last) }} · {{ bytes }} byte</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn" href="/admin/logs">← Danh sách</a>
+    <a class="btn" href="/admin/logs/{{ dev }}?raw=1">Tải .log</a>
+    <a class="btn" href="/admin/logs/{{ dev }}">Làm mới</a>
+  </div>
+</div>
+
+{% if missing_key %}
+<div class="alert warn">Không tìm thấy khoá giải mã (klog) cho thiết bị này — khoá đã hết hạn sau 24 giờ hoặc máy chưa mở cổng thành công. Log đã lưu không thể giải mã.</div>
+{% else %}
+<div class="card">
+  <div class="card-body">
+    <pre class="logbox">{{ text }}</pre>
+  </div>
+</div>
+<script>setTimeout(function () { location.reload(); }, 10000);</script>
+{% endif %}
+<style>
+  .logbox { white-space: pre-wrap; word-break: break-word; margin: 0;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 12px; line-height: 1.55; max-height: 75vh; overflow: auto; }
+</style>
+{% endblock %}

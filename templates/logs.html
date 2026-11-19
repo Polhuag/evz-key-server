@@ -1,0 +1,45 @@
+{% extends "admin_base.html" %}
+{% block title %}Nhật ký client · {{ app }}{% endblock %}
+{% block crumb %}Nhật ký client{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Nhật ký client</h1>
+    <p class="page-desc">{{ items|length }} thiết bị đã gửi log · tối đa 40 chunk / 14 ngày mỗi máy</p>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-head">
+    <div>
+      <h2 class="card-title">Thiết bị gửi log</h2>
+      <div class="card-sub">Sắp xếp theo lần gửi gần nhất</div>
+    </div>
+    <span class="badge mut spacer">{{ items|length }}</span>
+  </div>
+  {% if items %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Dev</th><th>Phiên bản</th><th>Lần cuối</th><th>Chunk</th><th>Bytes</th><th style="width:150px"></th></tr></thead>
+      <tbody>
+      {% for it in items %}
+        <tr>
+          <td data-label="Dev"><span class="mono">{{ it.dev }}</span></td>
+          <td data-label="Phiên bản" class="small">{{ it.ver or '—' }}</td>
+          <td data-label="Lần cuối" class="small muted">{{ fmt(it.last) }}</td>
+          <td data-label="Chunk" class="small num">{{ it.chunks }}</td>
+          <td data-label="Bytes" class="small num">{{ it.bytes or '—' }}</td>
+          <td class="actions">
+            <a class="btn sm" href="/admin/logs/{{ it.dev }}">Xem</a>
+            <a class="btn sm" href="/admin/logs/{{ it.dev }}?raw=1">Tải</a>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty"><p>Chưa có log nào được gửi lên.</p></div>
+  {% endif %}
+</div>
+{% endblock %}

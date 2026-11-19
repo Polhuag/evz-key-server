@@ -15,6 +15,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Resp
 from fastapi.templating import Jinja2Templates
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from store import open_store
 import struct
@@ -34,6 +35,17 @@ LOCAL_LIB = os.path.join(LIB_DIR, "current.so")
 COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "1") == "1"
 FREE_ENABLED = os.environ.get("FREE_KEYS_ENABLED", "0") == "1"
 TZ = timezone(timedelta(hours=7))
+
+LOG_MAX_BYTES = 200_000
+LOG_MAX_RAW = 300_000
+LOG_MAX_LINE = 4096
+LOG_KEEP = 40
+LOG_TTL = 14 * 86400
+LOG_TOKEN_TTL = 86400
+LOG_BAD_MAX = 5
+LOG_DEV_RE = re.compile(r"^[0-9a-f]{16}$")
+LOG_VER_RE = re.compile(r"^1\.64\.1\.7-v\d+$")
+LOG_TOK_RE = re.compile(r"^[0-9a-f]{32}$")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
@@ -59,6 +71,10 @@ PRIVATE_KEY = _load_private_key()
 
 def now_ts():
     return int(time.time())
+
+
+def log_dev_id(serial):
+    return hashlib.sha256(str(serial or "").encode()).hexdigest()[:16]
 
 
 def fmt_ts(ts):
@@ -662,6 +678,15 @@ async def v2_open(request: Request):
     tr = gate.manifest(sid, sn, spub, cpub, cn, sess["n"], sess["csz"], GATE_MODE,
                        sess["ver"], plan["root"], plan["ldig"], exp)
     sig = PRIVATE_KEY.sign(tr, padding.PKCS1v15(), hashes.SHA256()) if PRIVATE_KEY else b""
+    lt = secrets.token_hex(16)
+    try:
+        shared = gate.x25519_shared(sk, cpub)
+        skey = gate.session_key(shared, sid, sn, cpub, spub, cn)
+        klog = hashlib.sha256(b"EVZ2L" + skey).hexdigest()
+        kv.set_ex("evzlog:key:" + log_dev_id(serial), klog.encode(), LOG_TOKEN_TTL)
+        kv.set_ex("evzlog:tok:" + log_dev_id(serial), lt.encode(), LOG_TOKEN_TTL)
+    except Exception:
+        pass
     log_event({"ip": ip, "key": mask(key), "serial": mask(serial), "ok": 1, "r": "v2", "ver": build})
     return JSONResponse({
         "ok": 1, "sid": sid.hex(), "sn": base64.b64encode(sn).decode(),
@@ -671,6 +696,7 @@ async def v2_open(request: Request):
         "leaves": [base64.b64encode(x).decode() for x in plan["leaves"]],
         "sig": base64.b64encode(sig).decode(),
         "strict": 1 if GATE_STRICT else 0,
+        "lt": lt,
     })
 
 
@@ -766,6 +792,147 @@ async def api_free(request: Request):
     put_key(rec)
     log_event({"ip": ip, "key": mask(key), "serial": mask(serial), "ok": 1, "r": "free", "ver": ""})
     return JSONResponse({"status": True, "data": {"key": key, "EXP": fmt_ts(rec.get("expires")) if rec.get("expires") else "Vĩnh viễn"}})
+
+
+# ---------------------------------------------------------------------------
+# client log ingest
+# ---------------------------------------------------------------------------
+
+def _log_bad_ratio(body):
+    if not body:
+        return 0.0
+    bad = 0
+    for b in body:
+        if b in (9, 10, 13):
+            continue
+        if b < 32 or b == 127:
+            bad += 1
+    return bad / float(len(body))
+
+
+@app.post("/log")
+async def client_log(request: Request):
+    dev = request.query_params.get("dev", "")
+    ver = request.query_params.get("ver", "")[:32]
+    tok = request.query_params.get("t", "")
+
+    if not LOG_DEV_RE.fullmatch(dev):
+        return JSONResponse({"ok": False, "e": "dev"}, status_code=400)
+    if not LOG_VER_RE.fullmatch(ver):
+        return JSONResponse({"ok": False, "e": "bad"}, status_code=400)
+
+    ip = client_ip(request)
+    minute = now_ts() // 60
+
+    # per-IP budget first: cheap protection for Redis and token probing
+    try:
+        ipk = "evzlog:ipl:%s:%d" % (ip, minute)
+        ipn = kv.incr(ipk)
+        if ipn == 1:
+            kv.expire(ipk, 70)
+    except Exception:
+        return JSONResponse({"ok": False, "e": "store"}, status_code=500)
+    if ipn > 20:
+        return JSONResponse({"ok": False, "e": "busy"}, status_code=429)
+
+    try:
+        want = kv.get("evzlog:tok:" + dev)
+    except Exception:
+        return JSONResponse({"ok": False, "e": "store"}, status_code=500)
+
+    ok = bool(want) and bool(LOG_TOK_RE.fullmatch(tok)) and hmac.compare_digest(want, tok.encode())
+    if not ok:
+        try:
+            bk = "evzlog:bad:" + dev
+            bad = kv.incr(bk)
+            if bad == 1:
+                kv.expire(bk, 3600)
+            if bad > LOG_BAD_MAX:
+                kv.delete("evzlog:tok:" + dev)
+        except Exception:
+            pass
+        return JSONResponse({"ok": False, "e": "auth"}, status_code=403)
+
+    # per-device: at most one accepted log per 20 seconds
+    try:
+        got = kv.set_nx("evzlog:rl:" + dev, b"1", 20)
+    except Exception:
+        return JSONResponse({"ok": False, "e": "store"}, status_code=500)
+    if not got:
+        return JSONResponse({"ok": False, "e": "slow"}, status_code=429)
+
+    # global cap: 600 accepted-ish requests per minute
+    try:
+        gk = "evzlog:grl:%d" % minute
+        gn = kv.incr(gk)
+        if gn == 1:
+            kv.expire(gk, 70)
+    except Exception:
+        return JSONResponse({"ok": False, "e": "store"}, status_code=500)
+    if gn > 600:
+        return JSONResponse({"ok": False, "e": "busy"}, status_code=429)
+
+    try:
+        kraw = kv.get("evzlog:key:" + dev)
+    except Exception:
+        return JSONResponse({"ok": False, "e": "store"}, status_code=500)
+    if not kraw:
+        return JSONResponse({"ok": False, "e": "auth"}, status_code=403)
+    try:
+        klog = bytes.fromhex(kraw.decode())
+    except Exception:
+        return JSONResponse({"ok": False, "e": "auth"}, status_code=403)
+
+    clen = request.headers.get("content-length", "")
+    if clen.isdigit() and int(clen) > LOG_MAX_RAW:
+        return JSONResponse({"ok": False, "e": "big"}, status_code=413)
+    total = 0
+    parts = []
+    try:
+        async for chunk in request.stream():
+            total += len(chunk)
+            if total > LOG_MAX_RAW:
+                return JSONResponse({"ok": False, "e": "big"}, status_code=413)
+            parts.append(chunk)
+    except Exception:
+        return JSONResponse({"ok": False, "e": "bad"}, status_code=400)
+    body = b"".join(parts)
+
+    b64 = b"".join(body.split())
+    try:
+        blob = base64.b64decode(b64, validate=True)
+    except Exception:
+        return JSONResponse({"ok": False, "e": "bad"}, status_code=400)
+    if len(blob) < 28:
+        return JSONResponse({"ok": False, "e": "bad"}, status_code=400)
+    try:
+        plain = AESGCM(klog).decrypt(blob[:12], blob[12:], dev.encode())
+    except Exception:
+        return JSONResponse({"ok": False, "e": "bad"}, status_code=400)
+
+    if len(plain) > LOG_MAX_BYTES:
+        return JSONResponse({"ok": False, "e": "big"}, status_code=413)
+    lines = plain.splitlines() or ([plain] if plain else [])
+    if lines and all(len(x) > LOG_MAX_LINE for x in lines):
+        return JSONResponse({"ok": False, "e": "bad"}, status_code=400)
+    if plain and (b"\x00" in plain or _log_bad_ratio(plain) > 0.10):
+        return JSONResponse({"ok": False, "e": "bad"}, status_code=400)
+
+    ts = now_ts()
+    stamp = datetime.fromtimestamp(ts, TZ).strftime("%Y-%m-%dT%H:%M:%S%z")
+    header = ("----- %s ver=%s %d bytes -----\n" % (stamp, ver, len(plain))).encode()
+    try:
+        ck = "evzlog:chunks:" + dev
+        kv.rpush(ck, header + b64)
+        kv.ltrim(ck, -LOG_KEEP, -1)
+        kv.expire(ck, LOG_TTL)
+        mk = "evzlog:meta:" + dev
+        kv.hset(mk, {"dev": dev, "ver": ver, "last": str(ts), "bytes": str(len(plain))})
+        kv.expire(mk, LOG_TTL)
+        kv.zadd("evzlog:index", ts, dev)
+    except Exception:
+        return JSONResponse({"ok": False, "e": "store"}, status_code=500)
+    return JSONResponse({"ok": True})
 
 
 # ---------------------------------------------------------------------------
@@ -1096,6 +1263,109 @@ def admin_devices_action(request: Request, serial: str = Form(...), action: str 
     elif action == "unblock":
         kv.delete("devblk:" + serial)
     return RedirectResponse("/admin/devices", status_code=303)
+
+
+def _log_meta(dev):
+    try:
+        raw = kv.hgetall("evzlog:meta:" + dev) or {}
+    except Exception:
+        raw = {}
+    out = {}
+    for k, v in raw.items():
+        k = k.decode() if isinstance(k, bytes) else str(k)
+        out[k] = v.decode() if isinstance(v, bytes) else str(v)
+    return out
+
+
+def _log_key(dev):
+    try:
+        raw = kv.get("evzlog:key:" + dev)
+        if not raw:
+            return None
+        return bytes.fromhex(raw.decode())
+    except Exception:
+        return None
+
+
+def _log_chunks(dev):
+    try:
+        return kv.rrange("evzlog:chunks:" + dev, -LOG_KEEP, -1) or []
+    except Exception:
+        return []
+
+
+def _log_plain(dev):
+    key = _log_key(dev)
+    if key is None:
+        return None
+    out = []
+    for ch in _log_chunks(dev):
+        _h, _sep, b64 = ch.partition(b"\n")
+        try:
+            blob = base64.b64decode(b"".join(b64.split()), validate=True)
+            if len(blob) < 28:
+                continue
+            out.append(AESGCM(key).decrypt(blob[:12], blob[12:], dev.encode()))
+        except Exception:
+            out.append(b"[chunk khong giai ma duoc]\n")
+    return b"".join(out)
+
+
+@app.get("/admin/logs", response_class=HTMLResponse)
+def admin_logs(request: Request):
+    if not check_session(request):
+        return RedirectResponse("/admin/login", status_code=303)
+    items = []
+    try:
+        rows = kv.zrevrange("evzlog:index", 0, 199, withscores=True) or []
+    except Exception:
+        rows = []
+    for row in rows:
+        if isinstance(row, (tuple, list)):
+            dev, score = row[0], row[1]
+        else:
+            dev, score = row, 0
+        dev = dev.decode() if isinstance(dev, bytes) else str(dev)
+        meta = _log_meta(dev)
+        try:
+            nchunks = kv.llen("evzlog:chunks:" + dev)
+        except Exception:
+            nchunks = 0
+        items.append({"dev": dev, "ver": meta.get("ver", ""), "chunks": nchunks,
+                      "last": int(float(score) or 0), "bytes": meta.get("bytes", "")})
+    return templates.TemplateResponse("logs.html", {
+        "request": request, "app": APP_NAME, "user_name": auth_user(), "page_name": "logs",
+        "items": items, "fmt": fmt_ts, "stats": stats(),
+    })
+
+
+@app.get("/admin/logs/{dev}", response_class=HTMLResponse)
+def admin_log_detail(request: Request, dev: str, raw: int = 0):
+    if not check_session(request):
+        return RedirectResponse("/admin/login", status_code=303)
+    if not LOG_DEV_RE.fullmatch(dev):
+        raise HTTPException(status_code=404, detail="not found")
+    meta = _log_meta(dev)
+    plain = _log_plain(dev)
+    if plain is None:
+        if raw:
+            raise HTTPException(status_code=409, detail="log key expired")
+        return templates.TemplateResponse("log_detail.html", {
+            "request": request, "app": APP_NAME, "user_name": auth_user(), "page_name": "logs",
+            "dev": dev, "text": "", "missing_key": True, "raw": 0,
+            "ver": meta.get("ver", ""), "last": int(meta.get("last") or 0),
+            "bytes": 0, "shown": 0, "fmt": fmt_ts, "stats": stats(),
+        })
+    if raw:
+        return Response(content=plain, media_type="text/plain; charset=utf-8",
+                        headers={"Content-Disposition": 'attachment; filename="%s.log"' % dev})
+    text = plain.decode("utf-8", "replace")
+    return templates.TemplateResponse("log_detail.html", {
+        "request": request, "app": APP_NAME, "user_name": auth_user(), "page_name": "logs",
+        "dev": dev, "text": text, "missing_key": False, "raw": 0,
+        "ver": meta.get("ver", ""), "last": int(meta.get("last") or 0),
+        "bytes": len(plain), "shown": len(text), "fmt": fmt_ts, "stats": stats(),
+    })
 
 
 def releases_list():
