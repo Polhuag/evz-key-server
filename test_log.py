@@ -53,7 +53,7 @@ c = TestClient(srv.app)
 
 
 def open_gate(serial):
-    """Simulate a mod client doing /v2/open and derive the log key locally."""
+    """Simulate a mod client doing /v2/open and read the issued log token/key."""
     sk, cpub = gate.x25519_pair()
     cn = os.urandom(16)
     proof = gate.proof(KEY, serial, CERT, BUILD, cpub, cn)
@@ -67,12 +67,9 @@ def open_gate(serial):
     o = r.json()
     assert o.get("ok") == 1, o
     assert len(o.get("lt", "")) == 32, o
-    sid = bytes.fromhex(o["sid"])
-    sn = base64.b64decode(o["sn"])
-    spub = base64.b64decode(o["spub"])
-    shared = gate.x25519_shared(sk, spub)
-    skey = gate.session_key(shared, sid, sn, cpub, spub, cn)
-    klog = hashlib.sha256(b"EVZ2L" + skey).digest()
+    assert len(o.get("lk", "")) == 64, o
+    klog = bytes.fromhex(o["lk"])
+    assert klog == bytes.fromhex(srv.kv.get("evzlog:key:" + srv.log_dev_id(serial)).decode())
     return o["lt"], srv.log_dev_id(serial), klog
 
 
@@ -87,6 +84,21 @@ def post_log(dev, tok, body, ver=VER, ip="10.1.0.1"):
                   content=body, headers={"x-forwarded-for": ip,
                                          "content-type": "text/plain"})
 
+
+# 0) /connect issues lt + lk in the signed payload; use them for /log
+serial_c = "serial-connect-1"
+r = c.post("/connect", json={"user_key": KEY, "serial": serial_c, "ver": VER})
+assert r.status_code == 200, r.text
+o = r.json()
+assert o.get("status") is True, o
+payload = json.loads(base64.b64decode(o["data"]["payload"]).decode())
+assert len(payload.get("lt", "")) == 32 and len(payload.get("lk", "")) == 64, payload
+devc = srv.log_dev_id(serial_c)
+assert srv.kv.get("evzlog:tok:" + devc).decode() == payload["lt"]
+assert srv.kv.get("evzlog:key:" + devc).decode() == payload["lk"]
+r = post_log(devc, payload["lt"], encrypt(bytes.fromhex(payload["lk"]), devc, b"from connect\n"), ip="10.2.0.1")
+assert r.status_code == 200 and r.json() == {"ok": True}, (r.status_code, r.text)
+print("ok /connect payload lt+lk drive encrypted /log")
 
 # 1) encrypted body + valid token -> accepted, stored, then per-dev 20s limit
 lt, dev1, klog1 = open_gate("serial-log-1")

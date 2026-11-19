@@ -41,7 +41,7 @@ LOG_MAX_RAW = 300_000
 LOG_MAX_LINE = 4096
 LOG_KEEP = 40
 LOG_TTL = 14 * 86400
-LOG_TOKEN_TTL = 86400
+LOG_TOKEN_TTL = 7 * 86400
 LOG_BAD_MAX = 5
 LOG_DEV_RE = re.compile(r"^[0-9a-f]{16}$")
 LOG_VER_RE = re.compile(r"^1\.64\.1\.7-v\d+$")
@@ -370,6 +370,14 @@ async def connect(request: Request):
 
     exp_ts = rec.get("expires") or 0
     meta = lib_meta(game) or {}
+    log_dev = log_dev_id(serial)
+    log_lt = secrets.token_hex(16)
+    log_lk = secrets.token_hex(32)
+    try:
+        kv.set_ex("evzlog:tok:" + log_dev, log_lt.encode(), LOG_TOKEN_TTL)
+        kv.set_ex("evzlog:key:" + log_dev, log_lk.encode(), LOG_TOKEN_TTL)
+    except Exception:
+        pass
     payload = {
         "k": key,
         "s": serial,
@@ -385,6 +393,8 @@ async def connect(request: Request):
         "fr": 1 if rec.get("free") else 0,
         "v2": 1 if GATE_ON else 0,
         "strict": 1 if GATE_STRICT else 0,
+        "lt": log_lt,
+        "lk": log_lk,
     }
     payload_b64, sig_b64 = sign_payload(payload)
     lib = None
@@ -679,11 +689,9 @@ async def v2_open(request: Request):
                        sess["ver"], plan["root"], plan["ldig"], exp)
     sig = PRIVATE_KEY.sign(tr, padding.PKCS1v15(), hashes.SHA256()) if PRIVATE_KEY else b""
     lt = secrets.token_hex(16)
+    lk = secrets.token_hex(32)
     try:
-        shared = gate.x25519_shared(sk, cpub)
-        skey = gate.session_key(shared, sid, sn, cpub, spub, cn)
-        klog = hashlib.sha256(b"EVZ2L" + skey).hexdigest()
-        kv.set_ex("evzlog:key:" + log_dev_id(serial), klog.encode(), LOG_TOKEN_TTL)
+        kv.set_ex("evzlog:key:" + log_dev_id(serial), lk.encode(), LOG_TOKEN_TTL)
         kv.set_ex("evzlog:tok:" + log_dev_id(serial), lt.encode(), LOG_TOKEN_TTL)
     except Exception:
         pass
@@ -697,6 +705,7 @@ async def v2_open(request: Request):
         "sig": base64.b64encode(sig).decode(),
         "strict": 1 if GATE_STRICT else 0,
         "lt": lt,
+        "lk": lk,
     })
 
 
@@ -881,6 +890,8 @@ async def client_log(request: Request):
     try:
         klog = bytes.fromhex(kraw.decode())
     except Exception:
+        return JSONResponse({"ok": False, "e": "auth"}, status_code=403)
+    if len(klog) != 32:
         return JSONResponse({"ok": False, "e": "auth"}, status_code=403)
 
     clen = request.headers.get("content-length", "")
