@@ -376,6 +376,7 @@ async def connect(request: Request):
     try:
         kv.set_ex("evzlog:tok:" + log_dev, log_lt.encode(), LOG_TOKEN_TTL)
         kv.set_ex("evzlog:key:" + log_dev, log_lk.encode(), LOG_TOKEN_TTL)
+        kv.delete("evzlog:chunks:" + log_dev)
     except Exception:
         pass
     payload = {
@@ -693,6 +694,7 @@ async def v2_open(request: Request):
     try:
         kv.set_ex("evzlog:key:" + log_dev_id(serial), lk.encode(), LOG_TOKEN_TTL)
         kv.set_ex("evzlog:tok:" + log_dev_id(serial), lt.encode(), LOG_TOKEN_TTL)
+        kv.delete("evzlog:chunks:" + log_dev_id(serial))
     except Exception:
         pass
     log_event({"ip": ip, "key": mask(key), "serial": mask(serial), "ok": 1, "r": "v2", "ver": build})
@@ -1312,6 +1314,7 @@ def _log_plain(dev):
     out = []
     for ch in _log_chunks(dev):
         _h, _sep, b64 = ch.partition(b"\n")
+        out.append(bytes(_h) + b"\n")
         try:
             blob = base64.b64decode(b"".join(b64.split()), validate=True)
             if len(blob) < 28:
